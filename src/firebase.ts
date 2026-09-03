@@ -4,6 +4,12 @@ import { getFirestore } from "firebase/firestore";
 import firebaseConfig from "../firebase-applet-config.json";
 import { initializeAppCheck, ReCaptchaV3Provider } from "firebase/app-check";
 
+// Initialize Firebase App singleton
+export const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+
+// App Check (reCAPTCHA v3). MUST run after `app` is declared above — calling
+// initializeAppCheck(app, ...) before that line throws a TDZ ReferenceError and
+// breaks the whole app in production. No-op until recaptchaSiteKey is set.
 if (typeof window !== "undefined" && firebaseConfig.recaptchaSiteKey) {
   const isLocalhost = ["localhost", "127.0.0.1"].includes(window.location.hostname);
   if (isLocalhost) {
@@ -14,9 +20,6 @@ if (typeof window !== "undefined" && firebaseConfig.recaptchaSiteKey) {
     isTokenAutoRefreshEnabled: true,
   });
 }
-
-// Initialize Firebase App singleton
-export const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
 // Initialize Firebase Auth
 export const auth = getAuth(app);
