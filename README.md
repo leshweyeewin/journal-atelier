@@ -86,6 +86,16 @@ gcloud secrets add-iam-policy-binding TELEGRAM_BOT_TOKEN \
   --role="roles/secretmanager.secretAccessor"
 ```
 
+### Telegram Bot Setup (optional feature)
+
+To enable outbound reflection alerts:
+
+1. **Create the bot**: message [@BotFather](https://t.me/BotFather) → `/newbot` → copy the token (`123456:ABC-DEF...`). This token is the value of the `TELEGRAM_BOT_TOKEN` secret above — keep it server-side only.
+2. **Start the bot**: open your new bot in Telegram and press **Start** (or send it any message). Telegram bots **cannot initiate a conversation** — until the user does this, `sendMessage` returns `403 Forbidden` and no alert is delivered.
+3. **Get your chat ID**: message [@userinfobot](https://t.me/userinfobot); it replies with your numeric `Id`. Paste this into the app's Telegram settings panel after signing in.
+
+If `TELEGRAM_BOT_TOKEN` is not configured, the feature is a no-op — reflections still synthesize and persist normally.
+
 ---
 
 ## 3. Database Security Configuration (Cloud Firestore)
