@@ -7,12 +7,21 @@ export interface ChatMessage {
   timestamp: number;
 }
 
+export interface SentimentResult {
+  tag: string;
+  confidence: number;
+}
+
 export interface SummaryResult {
   suggestedTitle?: string;
   summary?: string;
   insights?: string[];
   tags?: string[];
   mood?: string;
+  reflection?: string;
+  sentiment?: SentimentResult;
+  themes?: string[];
+  coachPrompt?: string;
   modelUsed?: string;
 }
 
@@ -27,6 +36,10 @@ export interface JournalInteraction {
   insights?: string[];
   tags?: string[];
   mood?: string;
+  reflection?: string;
+  sentiment?: SentimentResult;
+  themes?: string[];
+  coachPrompt?: string;
   modelUsed?: string;
   createdAt: number;
   updatedAt: number;

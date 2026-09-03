@@ -164,7 +164,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-800 disabled:opacity-40 transition cursor-pointer"
           >
             <Sparkles className={`w-3.5 h-3.5 text-amber-600 ${isAiSummarizing ? "animate-spin" : ""}`} />
-            <span>{isAiSummarizing ? "Synthesizing..." : "Synthesize & Tag"}</span>
+            <span>{isAiSummarizing ? "Synthesizing..." : "Synthesize"}</span>
           </button>
 
           {/* Ask Gemini Button */}
