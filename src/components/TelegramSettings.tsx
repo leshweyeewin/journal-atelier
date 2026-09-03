@@ -186,7 +186,6 @@ export const TelegramSettings: React.FC<TelegramSettingsProps> = ({
               id="telegram-chat-id-input"
               type="text"
               inputMode="numeric"
-              pattern="^-?[0-9]+$"
               placeholder="e.g. 123456789"
               value={chatId}
               onChange={(e) => {
@@ -196,6 +195,9 @@ export const TelegramSettings: React.FC<TelegramSettingsProps> = ({
               className="w-full text-xs px-3 py-1.5 rounded-md border border-stone-300 bg-white text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-1 focus:ring-stone-800"
               required
             />
+            <p className="text-[11px] text-stone-500 mt-1">
+              Numbers only — your numeric chat ID (e.g. 123456789).
+            </p>
           </div>
 
           {/* Hint requirement: one-line hint to message the bot and get their id from @userinfobot */}

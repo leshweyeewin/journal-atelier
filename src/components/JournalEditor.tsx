@@ -182,7 +182,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
               type="button"
               onClick={onSummarizeWithAI}
               disabled={!content.trim() || isAiSummarizing}
-              title="Run all 4 agents (title, mood, themes, coach question)"
+              title="Runs all 4 agents once for a structured summary (title, mood, themes, coach question)."
               className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border border-stone-200 bg-white hover:bg-stone-50 text-stone-700 hover:text-stone-900 active:scale-95 disabled:opacity-40 transition shadow-2xs cursor-pointer group"
             >
               <Sparkles className={`w-3.5 h-3.5 text-amber-600 ${isAiSummarizing ? "animate-spin" : ""}`} />
@@ -199,6 +199,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
             type="button"
             onClick={onReflectWithAI}
             disabled={!content.trim() || isAiReflecting}
+            title="Starts a back-and-forth conversation below."
             className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-lg bg-amber-500 hover:bg-amber-600 active:scale-95 text-stone-950 shadow-xs hover:shadow-sm disabled:opacity-40 transition cursor-pointer"
           >
             <Sparkles className={`w-3.5 h-3.5 text-stone-950 ${isAiReflecting ? "animate-spin" : ""}`} />
