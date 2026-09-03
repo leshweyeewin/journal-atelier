@@ -1,6 +1,7 @@
 import React, { useState } from "react";
-import { Lock, Sparkles, BookOpen, ShieldCheck, ArrowRight, Brain, AlertCircle } from "lucide-react";
+import { Lock, Sparkles, ShieldCheck, ArrowRight, Brain, AlertCircle, Smartphone } from "lucide-react";
 import { signInWithGoogle } from "../firebase";
+import { LogoMark } from "./LogoMark";
 
 interface LandingPageProps {
   onAuthSuccess?: () => void;
@@ -35,11 +36,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onAuthSuccess }) => {
       {/* Top Header */}
       <header className="w-full max-w-6xl mx-auto px-6 py-6 flex items-center justify-between border-b border-stone-200">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-stone-900 text-stone-50 flex items-center justify-center shadow-sm">
-            <BookOpen className="w-5 h-5 text-amber-300" />
-          </div>
+          <LogoMark size={32} />
           <div>
-            <span className="font-semibold text-stone-900 tracking-tight text-lg">Reflection Studio</span>
+            <span className="font-semibold text-stone-900 tracking-tight text-lg">Journal Atelier</span>
             <span className="ml-2 text-xs font-medium px-2 py-0.5 rounded-md bg-stone-200 text-stone-700">Gemini 3.6</span>
           </div>
         </div>
@@ -82,9 +81,17 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onAuthSuccess }) => {
         )}
 
         <div className="text-center max-w-3xl mx-auto mb-12">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-xs font-medium mb-6">
-            <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-            Personal Reflection & Multi-Turn Brainstorming
+          {/* Hero Brand Lockup */}
+          <div className="flex items-center justify-center gap-4 mb-8">
+            <LogoMark size={64} />
+            <div className="text-left">
+              <span className="block font-serif text-3xl sm:text-4xl tracking-tight text-stone-900 leading-tight">
+                Journal Atelier
+              </span>
+              <span className="block text-xs sm:text-sm text-stone-500 font-sans tracking-wide mt-0.5">
+                Reflection, clarified by Gemini.
+              </span>
+            </div>
           </div>
 
           <h1 className="text-4xl sm:text-5xl font-serif tracking-tight text-stone-900 leading-tight mb-4">
@@ -140,7 +147,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onAuthSuccess }) => {
         </div>
 
         {/* Feature Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mt-6">
           <div className="p-6 rounded-2xl bg-white border border-stone-200/80 shadow-sm">
             <div className="w-10 h-10 rounded-lg bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-700 mb-4">
               <Brain className="w-5 h-5" />
@@ -168,6 +175,16 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onAuthSuccess }) => {
             <h3 className="font-semibold text-stone-900 text-base mb-2">Zero-Password, Verified Auth</h3>
             <p className="text-stone-600 text-sm leading-relaxed">
               Federated Google Sign-In means no passwords. Every server request is cryptographically verified with the Firebase Admin SDK before any data is touched.
+            </p>
+          </div>
+
+          <div id="landing-feature-telegram" className="p-6 rounded-2xl bg-white border border-stone-200/80 shadow-sm">
+            <div className="w-10 h-10 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-700 mb-4">
+              <Smartphone className="w-5 h-5" />
+            </div>
+            <h3 className="font-semibold text-stone-900 text-base mb-2">Reflections to Your Phone</h3>
+            <p className="text-stone-600 text-sm leading-relaxed">
+              Opt in to get each reflection's mood and Coach question pushed to your Telegram — outbound-only, so nothing ever reads your chats back.
             </p>
           </div>
         </div>

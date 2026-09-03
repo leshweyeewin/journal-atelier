@@ -125,3 +125,59 @@ export async function callMultiAgentReflect(
 
   return await response.json();
 }
+
+export interface TelegramSettingsResponse {
+  telegramChatId: string | null;
+  connected: boolean;
+  success?: boolean;
+}
+
+export async function getTelegramSettings(): Promise<TelegramSettingsResponse> {
+  const token = await getIdToken();
+  if (!token) {
+    return { telegramChatId: null, connected: false };
+  }
+
+  const response = await fetch("/api/settings/telegram", {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to load Telegram settings (status ${response.status})`);
+  }
+
+  return await response.json();
+}
+
+export async function saveTelegramSettings(chatId: string | null): Promise<TelegramSettingsResponse> {
+  const token = await getIdToken();
+  if (!token) {
+    throw new Error("Authentication session expired. Please sign in again.");
+  }
+
+  const response = await fetch("/api/settings/telegram", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      telegramChatId: chatId,
+    }),
+  });
+
+  if (!response.ok) {
+    let errorMsg = "Failed to save Telegram settings.";
+    try {
+      const errorJson = await response.json();
+      if (errorJson.error) errorMsg = errorJson.error;
+    } catch {
+      errorMsg = `Server returned status ${response.status}`;
+    }
+    throw new Error(errorMsg);
+  }
+
+  return await response.json();
+}
