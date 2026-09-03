@@ -47,6 +47,7 @@ export default function App() {
   const [failedSavePayload, setFailedSavePayload] = useState<Partial<JournalInteraction> | null>(null);
   const [isTelegramConnected, setIsTelegramConnected] = useState(false);
   const [isTelegramModalOpen, setIsTelegramModalOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   // Listen to Firebase Authentication state
   useEffect(() => {
@@ -420,6 +421,8 @@ export default function App() {
           onSelectEntry={handleSelectEntry}
           onDeleteEntry={handleDeleteEntry}
           isLoading={listLoading}
+          isCollapsed={isSidebarCollapsed}
+          onToggleCollapse={() => setIsSidebarCollapsed((prev) => !prev)}
         />
 
         {/* Main Stage: Active Journal Atelier */}

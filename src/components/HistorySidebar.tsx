@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Search, Calendar, Trash2, Tag, ChevronRight, BookMarked, Sparkles } from "lucide-react";
+import { Search, Calendar, Trash2, Tag, ChevronRight, ChevronLeft, BookMarked, Sparkles } from "lucide-react";
 import { JournalInteraction } from "../types";
 
 interface HistorySidebarProps {
@@ -8,6 +8,8 @@ interface HistorySidebarProps {
   onSelectEntry: (entry: JournalInteraction) => void;
   onDeleteEntry: (id: string, e: React.MouseEvent) => void;
   isLoading?: boolean;
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
 export const HistorySidebar: React.FC<HistorySidebarProps> = ({
@@ -16,6 +18,8 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
   onSelectEntry,
   onDeleteEntry,
   isLoading,
+  isCollapsed = false,
+  onToggleCollapse,
 }) => {
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -42,8 +46,37 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
     return date.toLocaleDateString([], { month: "short", day: "numeric" });
   };
 
+  // Thin rail render when collapsed
+  if (isCollapsed) {
+    return (
+      <aside
+        id="history-sidebar-collapsed"
+        className="w-full md:w-14 shrink-0 bg-stone-50/70 border-r border-stone-200 flex md:flex-col items-center justify-between md:justify-start py-3 px-3 md:px-0 h-auto md:h-[calc(100vh-4rem)] gap-3 transition-all duration-200"
+      >
+        <button
+          id="sidebar-expand-btn"
+          type="button"
+          onClick={onToggleCollapse}
+          title="Expand reflections sidebar"
+          className="p-2 rounded-lg text-stone-600 hover:text-stone-900 hover:bg-stone-200/60 active:scale-95 transition cursor-pointer flex items-center md:flex-col gap-1.5"
+          aria-label="Expand sidebar"
+        >
+          <BookMarked className="w-4 h-4 text-stone-700" />
+          <ChevronRight className="w-3.5 h-3.5 text-stone-400" />
+        </button>
+
+        <span className="text-[10px] font-medium text-stone-400 md:[writing-mode:vertical-lr] tracking-wider uppercase select-none">
+          Reflections ({entries.length})
+        </span>
+      </aside>
+    );
+  }
+
   return (
-    <aside className="w-full md:w-80 lg:w-88 shrink-0 bg-stone-50/70 border-r border-stone-200 flex flex-col h-[calc(100vh-4rem)]">
+    <aside
+      id="history-sidebar-expanded"
+      className="w-full md:w-80 lg:w-88 shrink-0 bg-stone-50/70 border-r border-stone-200 flex flex-col h-[calc(100vh-4rem)] transition-all duration-200"
+    >
       {/* Sidebar Header & Search */}
       <div className="p-4 border-b border-stone-200 space-y-3 bg-white/60">
         <div className="flex items-center justify-between">
@@ -51,9 +84,23 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
             <BookMarked className="w-4 h-4 text-stone-700" />
             <h2 className="text-sm font-semibold text-stone-900">Your Reflections</h2>
           </div>
-          <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-stone-100 text-stone-600">
-            {entries.length} {entries.length === 1 ? "entry" : "entries"}
-          </span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-stone-100 text-stone-600">
+              {entries.length} {entries.length === 1 ? "entry" : "entries"}
+            </span>
+            {onToggleCollapse && (
+              <button
+                id="sidebar-collapse-btn"
+                type="button"
+                onClick={onToggleCollapse}
+                title="Collapse sidebar"
+                className="p-1 text-stone-400 hover:text-stone-700 hover:bg-stone-200/50 rounded-md transition cursor-pointer"
+                aria-label="Collapse sidebar"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="relative">

@@ -48,12 +48,17 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
       {/* Header */}
       <div className="px-4 py-3 border-b border-stone-200 bg-stone-50/70 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-md bg-amber-100 text-amber-800 flex items-center justify-center">
+          <div className="w-6 h-6 rounded-md bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
             <Bot className="w-3.5 h-3.5" />
           </div>
-          <span className="text-xs font-semibold text-stone-900">Gemini Reflection Dialogue</span>
+          <div>
+            <span className="text-xs font-semibold text-stone-900 block leading-tight">Gemini Reflection Dialogue</span>
+            <p className="text-[11px] text-stone-500 leading-tight">
+              Your ongoing conversation about this entry. Use 'Ask Gemini to Reflect' above to begin.
+            </p>
+          </div>
         </div>
-        <span className="text-[11px] text-stone-500">Multi-turn session</span>
+        <span className="text-[11px] text-stone-500 hidden sm:inline shrink-0">Multi-turn session</span>
       </div>
 
       {/* Messages Scroll Area */}
@@ -65,7 +70,7 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
             </div>
             <h4 className="text-sm font-medium text-stone-800 mb-1">Start a Conversation with Gemini</h4>
             <p className="text-xs text-stone-500 max-w-sm mb-4">
-              Ask follow-up questions, request brainstorming ideas, or seek constructive reframing on your reflection.
+              Your ongoing conversation about this entry. Use 'Ask Gemini to Reflect' above to begin.
             </p>
 
             {/* Quick suggested chips */}
