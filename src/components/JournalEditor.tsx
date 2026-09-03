@@ -1,5 +1,5 @@
 import React from "react";
-import { Sparkles, FileText, Lightbulb, Save, CheckCircle2, BookmarkPlus } from "lucide-react";
+import { Sparkles, Lightbulb, Save, CheckCircle2 } from "lucide-react";
 import { ReflectionMode } from "../types";
 
 interface JournalEditorProps {
@@ -50,58 +50,62 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
     }
   };
 
+  const activeMode = mode === "brainstorm" ? "brainstorm" : "reflect";
+
   return (
     <div id="journal-editor-container" className="flex flex-col bg-white rounded-2xl border border-stone-200 shadow-2xs p-5 mb-6">
-      {/* Top Meta Bar */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-4 mb-4 border-b border-stone-100">
+      {/* 1. Title Input */}
+      <div className="mb-3">
         <input
           id="journal-title-input"
           type="text"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder="Give your reflection a title (or let Gemini suggest one)..."
-          className="w-full sm:flex-1 text-base sm:text-lg font-semibold text-stone-900 placeholder-stone-400 focus:outline-none border-b border-transparent focus:border-stone-300 pb-0.5 transition"
+          className="w-full text-base sm:text-lg font-semibold text-stone-900 placeholder-stone-400 focus:outline-none border-b border-stone-100 focus:border-stone-300 pb-2 transition"
         />
-
-        {/* Reflection Mode Pills */}
-        <div className="flex items-center gap-1.5 p-1 rounded-xl bg-stone-100/80 border border-stone-200/60 self-stretch sm:self-auto">
-          <button
-            type="button"
-            onClick={() => setMode("reflect")}
-            className={`px-2.5 py-1 text-xs font-medium rounded-lg transition cursor-pointer ${
-              mode === "reflect"
-                ? "bg-white text-stone-900 shadow-2xs font-semibold"
-                : "text-stone-600 hover:text-stone-900"
-            }`}
-          >
-            Reflect
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode("brainstorm")}
-            className={`px-2.5 py-1 text-xs font-medium rounded-lg transition cursor-pointer ${
-              mode === "brainstorm"
-                ? "bg-white text-stone-900 shadow-2xs font-semibold"
-                : "text-stone-600 hover:text-stone-900"
-            }`}
-          >
-            Brainstorm
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode("summarize")}
-            className={`px-2.5 py-1 text-xs font-medium rounded-lg transition cursor-pointer ${
-              mode === "summarize"
-                ? "bg-white text-stone-900 shadow-2xs font-semibold"
-                : "text-stone-600 hover:text-stone-900"
-            }`}
-          >
-            Synthesize
-          </button>
-        </div>
       </div>
 
-      {/* Main Textarea */}
+      {/* 2. Conversation Tone Pills & Helper Line */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 mb-3.5 border-b border-stone-100">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold text-stone-500 uppercase tracking-wider">
+            Tone:
+          </span>
+          <div className="inline-flex items-center gap-1 p-1 rounded-xl bg-stone-100/80 border border-stone-200/60">
+            <button
+              type="button"
+              onClick={() => setMode("reflect")}
+              className={`px-3 py-1 text-xs rounded-lg transition cursor-pointer ${
+                activeMode === "reflect"
+                  ? "bg-white text-stone-900 shadow-2xs font-semibold"
+                  : "text-stone-600 hover:text-stone-900 font-medium"
+              }`}
+            >
+              Reflect
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode("brainstorm")}
+              className={`px-3 py-1 text-xs rounded-lg transition cursor-pointer ${
+                activeMode === "brainstorm"
+                  ? "bg-white text-stone-900 shadow-2xs font-semibold"
+                  : "text-stone-600 hover:text-stone-900 font-medium"
+              }`}
+            >
+              Brainstorm
+            </button>
+          </div>
+        </div>
+
+        <p className="text-xs text-stone-500 italic">
+          {activeMode === "brainstorm"
+            ? "Gemini pushes ideas outward and expands possibilities."
+            : "Gemini reflects your thoughts back and asks deeper questions."}
+        </p>
+      </div>
+
+      {/* 3. Main Textarea */}
       <div className="relative mb-3">
         <textarea
           id="journal-content-textarea"
@@ -119,7 +123,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
         </div>
       </div>
 
-      {/* Prompt Starters */}
+      {/* 4. Prompt Starters (only when empty) */}
       {!content.trim() && (
         <div className="mb-4">
           <div className="flex items-center gap-1.5 text-stone-500 text-xs font-medium mb-2">
@@ -141,9 +145,24 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
         </div>
       )}
 
-      {/* Action Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-stone-100">
-        <div className="flex items-center gap-2">
+      {/* 5. Action Row with Clear Hierarchy */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-3 border-t border-stone-100">
+        {/* Left: Demoted Save Draft + Saved Status */}
+        <div className="flex items-center gap-2.5">
+          <button
+            id="editor-save-firestore-btn"
+            type="button"
+            onClick={onSave}
+            disabled={isSaving}
+            title="Save current draft to Firestore"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg text-stone-600 hover:text-stone-900 hover:bg-stone-100 active:scale-95 disabled:opacity-40 transition cursor-pointer"
+          >
+            <Save className={`w-3.5 h-3.5 text-stone-500 ${isSaving ? "animate-pulse" : ""}`} />
+            <span>{isSaving ? "Saving..." : "Save draft"}</span>
+          </button>
+
+          <span className="text-stone-300">·</span>
+
           {lastSavedAt ? (
             <span className="inline-flex items-center gap-1 text-xs text-stone-500">
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
@@ -154,41 +173,36 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
           )}
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Synthesize Button */}
-          <button
-            id="editor-summarize-ai-btn"
-            type="button"
-            onClick={onSummarizeWithAI}
-            disabled={!content.trim() || isAiSummarizing}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-800 disabled:opacity-40 transition cursor-pointer"
-          >
-            <Sparkles className={`w-3.5 h-3.5 text-amber-600 ${isAiSummarizing ? "animate-spin" : ""}`} />
-            <span>{isAiSummarizing ? "Synthesizing..." : "Synthesize"}</span>
-          </button>
+        {/* Right: AI Actions (Secondary: Synthesize, Primary: Ask Gemini to Reflect) */}
+        <div className="flex items-center justify-end gap-2.5 flex-wrap">
+          {/* Secondary: Synthesize (Quieter outline/ghost style with subtitle/tooltip) */}
+          <div className="flex items-center">
+            <button
+              id="editor-summarize-ai-btn"
+              type="button"
+              onClick={onSummarizeWithAI}
+              disabled={!content.trim() || isAiSummarizing}
+              title="Run all 4 agents (title, mood, themes, coach question)"
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border border-stone-200 bg-white hover:bg-stone-50 text-stone-700 hover:text-stone-900 active:scale-95 disabled:opacity-40 transition shadow-2xs cursor-pointer group"
+            >
+              <Sparkles className={`w-3.5 h-3.5 text-amber-600 ${isAiSummarizing ? "animate-spin" : ""}`} />
+              <span>{isAiSummarizing ? "Synthesizing..." : "Synthesize"}</span>
+              <span className="text-[10px] text-stone-400 font-normal hidden md:inline group-hover:text-stone-500">
+                · 4 agents
+              </span>
+            </button>
+          </div>
 
-          {/* Ask Gemini Button */}
+          {/* Primary: Ask Gemini to Reflect (Most prominent amber button) */}
           <button
             id="editor-reflect-ai-btn"
             type="button"
             onClick={onReflectWithAI}
             disabled={!content.trim() || isAiReflecting}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-medium rounded-lg bg-amber-500 hover:bg-amber-600 text-stone-950 font-semibold disabled:opacity-40 transition shadow-2xs cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-lg bg-amber-500 hover:bg-amber-600 active:scale-95 text-stone-950 shadow-xs hover:shadow-sm disabled:opacity-40 transition cursor-pointer"
           >
-            <Sparkles className={`w-3.5 h-3.5 ${isAiReflecting ? "animate-spin" : ""}`} />
+            <Sparkles className={`w-3.5 h-3.5 text-stone-950 ${isAiReflecting ? "animate-spin" : ""}`} />
             <span>{isAiReflecting ? "Reflecting..." : "Ask Gemini to Reflect"}</span>
-          </button>
-
-          {/* Explicit Save to Firestore Button */}
-          <button
-            id="editor-save-firestore-btn"
-            type="button"
-            onClick={onSave}
-            disabled={isSaving}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-medium rounded-lg bg-stone-900 text-stone-50 hover:bg-stone-800 active:scale-95 disabled:opacity-50 transition shadow-2xs cursor-pointer"
-          >
-            <Save className={`w-3.5 h-3.5 ${isSaving ? "animate-pulse" : ""}`} />
-            <span>{isSaving ? "Saving..." : "Save to Firestore"}</span>
           </button>
         </div>
       </div>

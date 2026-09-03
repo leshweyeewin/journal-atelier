@@ -8,28 +8,38 @@ import { initializeApp, applicationDefault, getApps } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
 
+import https from "https";
+import crypto from "crypto";
+
 dotenv.config();
 
-// Initialize the Firebase Admin SDK once. On Cloud Run this uses Application
-// Default Credentials (the runtime service account) — no service-account JSON in
-// the repo — and auto-discovers the project. It is required to cryptographically
-// verify Firebase ID tokens server-side (CLAUDE.md §3).
-if (getApps().length === 0) {
-  initializeApp({ credential: applicationDefault() });
-}
-
-// Discover configured Firestore Database ID if present
 let firestoreDbId: string | undefined;
+let firebaseAppletConfig: any = {};
 try {
   const configPath = path.join(process.cwd(), "firebase-applet-config.json");
   if (fs.existsSync(configPath)) {
-    const raw = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-    if (raw.firestoreDatabaseId) {
-      firestoreDbId = raw.firestoreDatabaseId;
+    firebaseAppletConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+    if (firebaseAppletConfig.firestoreDatabaseId) {
+      firestoreDbId = firebaseAppletConfig.firestoreDatabaseId;
     }
   }
 } catch (e) {
-  console.warn("Could not read firestoreDatabaseId from config:", e);
+  console.warn("Could not read config from firebase-applet-config.json:", e);
+}
+
+// Initialize Firebase Admin with the applet's target Firebase project ID.
+// This prevents Cloud Run's ADC project ID ('ais-asia-east1-...') from overriding
+// the token audience expected by verifyIdToken ('gen-lang-client-...').
+const targetProjectId =
+  firebaseAppletConfig.projectId ||
+  process.env.FIREBASE_PROJECT_ID ||
+  process.env.GOOGLE_CLOUD_PROJECT;
+
+if (getApps().length === 0) {
+  initializeApp({
+    credential: applicationDefault(),
+    projectId: targetProjectId,
+  });
 }
 
 function getAdminDb() {
@@ -132,12 +142,88 @@ async function generateContentWithFallback(
   );
 }
 
+// Cache for Google's public x509 certs for Firebase Auth ID token validation
+let cachedPublicCertificates: { [key: string]: string } | null = null;
+let certExpiry = 0;
+
+async function getGooglePublicCerts(): Promise<{ [key: string]: string }> {
+  const now = Date.now();
+  if (cachedPublicCertificates && now < certExpiry) {
+    return cachedPublicCertificates;
+  }
+  return new Promise((resolve, reject) => {
+    https.get(
+      "https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com",
+      (res) => {
+        let data = "";
+        const cacheControl = res.headers["cache-control"];
+        let maxAge = 3600;
+        if (cacheControl) {
+          const match = cacheControl.match(/max-age=(\d+)/);
+          if (match && match[1]) {
+            maxAge = parseInt(match[1], 10);
+          }
+        }
+        res.on("data", (chunk) => (data += chunk));
+        res.on("end", () => {
+          try {
+            cachedPublicCertificates = JSON.parse(data);
+            certExpiry = Date.now() + maxAge * 1000;
+            resolve(cachedPublicCertificates!);
+          } catch (e) {
+            reject(e);
+          }
+        });
+      }
+    ).on("error", reject);
+  });
+}
+
+async function verifyFirebaseIdTokenAgainstGoogleKeys(idToken: string, expectedProjectId: string) {
+  const parts = idToken.split(".");
+  if (parts.length !== 3) {
+    throw new Error("Invalid JWT structure");
+  }
+
+  const [headerB64, payloadB64, signatureB64] = parts;
+  const header = JSON.parse(Buffer.from(headerB64, "base64url").toString("utf-8"));
+  const payload = JSON.parse(Buffer.from(payloadB64, "base64url").toString("utf-8"));
+
+  const nowInSec = Math.floor(Date.now() / 1000);
+  if (payload.exp < nowInSec) {
+    throw new Error("Firebase ID token has expired");
+  }
+  if (payload.auth_time > nowInSec + 300) {
+    throw new Error("Firebase ID token has invalid auth_time");
+  }
+  if (payload.aud !== expectedProjectId) {
+    throw new Error(`Firebase ID token aud mismatch: expected ${expectedProjectId}, got ${payload.aud}`);
+  }
+  if (payload.iss !== `https://securetoken.google.com/${expectedProjectId}`) {
+    throw new Error(`Firebase ID token iss mismatch: expected https://securetoken.google.com/${expectedProjectId}, got ${payload.iss}`);
+  }
+  if (!payload.sub || typeof payload.sub !== "string" || payload.sub.length === 0) {
+    throw new Error("Firebase ID token has invalid sub");
+  }
+
+  const certs = await getGooglePublicCerts();
+  const cert = certs[header.kid];
+  if (!cert) {
+    throw new Error(`Public key not found for kid ${header.kid}`);
+  }
+
+  const verifier = crypto.createVerify("RSA-SHA256");
+  verifier.update(`${headerB64}.${payloadB64}`);
+  const isValid = verifier.verify(cert, Buffer.from(signatureB64, "base64url"));
+  if (!isValid) {
+    throw new Error("Firebase ID token has invalid cryptographic signature");
+  }
+
+  return payload;
+}
+
 // Token authentication middleware (OWASP A01/A07 — Broken Access Control / Auth).
-// Cryptographically verifies the Firebase ID token against Google's public keys
-// via the Admin SDK, checking signature, issuer, audience and expiry. A forged or
-// tampered token (e.g. a hand-crafted JWT with an arbitrary user_id) is rejected —
-// the uid is trusted only because the signature proved it. NEVER decode the JWT
-// payload without verifying the signature.
+// Cryptographically verifies the Firebase ID token against Google's public keys.
 async function verifyUserToken(req: Request, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -149,13 +235,39 @@ async function verifyUserToken(req: Request, res: Response, next: NextFunction) 
     return res.status(401).json({ error: "Authentication token missing." });
   }
 
+  const expectedId =
+    firebaseAppletConfig.projectId ||
+    process.env.FIREBASE_PROJECT_ID ||
+    "gen-lang-client-0082384647";
+
   try {
-    const decoded = await getAuth().verifyIdToken(token);
-    (req as any).user = {
-      uid: decoded.uid,
-      email: decoded.email,
-    };
-    return next();
+    // Attempt verification via Firebase Admin SDK
+    try {
+      const decoded = await getAuth().verifyIdToken(token);
+      (req as any).user = {
+        uid: decoded.uid,
+        email: decoded.email,
+      };
+      return next();
+    } catch (adminErr: any) {
+      // In Cloud Run, Admin SDK might reject client tokens if ADC project ID ('ais-asia-east1-...')
+      // does not match the client Firebase project ('gen-lang-client-...').
+      // Cryptographically verify directly against Google's securetoken public certs.
+      const isAudienceMismatch =
+        adminErr?.message?.includes("aud") ||
+        adminErr?.message?.includes("audience") ||
+        adminErr?.message?.includes("project");
+
+      if (isAudienceMismatch) {
+        const verifiedPayload = await verifyFirebaseIdTokenAgainstGoogleKeys(token, expectedId);
+        (req as any).user = {
+          uid: verifiedPayload.user_id || verifiedPayload.sub,
+          email: verifiedPayload.email,
+        };
+        return next();
+      }
+      throw adminErr;
+    }
   } catch (err: any) {
     console.error("Token verification failed:", err?.message || err);
     return res.status(401).json({ error: "Invalid or expired authentication token." });
@@ -793,20 +905,52 @@ app.get("/api/settings/telegram", verifyUserToken, async (req: Request, res: Res
   }
 });
 
+// Explicit DELETE endpoint to disconnect Telegram
+app.delete("/api/settings/telegram", verifyUserToken, async (req: Request, res: Response) => {
+  const uid = (req as any).user?.uid;
+  if (!uid) return res.status(401).json({ error: "Unauthorized" });
+
+  try {
+    const db = getAdminDb();
+    await db.doc(`users/${uid}/settings/telegram`).set(
+      {
+        telegramChatId: null,
+        disconnectedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+      { merge: true }
+    );
+    return res.json({ success: true, connected: false, telegramChatId: null });
+  } catch (err: any) {
+    console.error("Failed to clear telegram settings:", err);
+    return res.status(500).json({ error: "Failed to clear telegram settings." });
+  }
+});
+
 app.post("/api/settings/telegram", verifyUserToken, async (req: Request, res: Response) => {
   const uid = (req as any).user?.uid;
   if (!uid) return res.status(401).json({ error: "Unauthorized" });
 
   const data = req.body && typeof req.body === "object" ? req.body : {};
-  const rawId = data.telegramChatId ?? data.chatId;
 
-  // Allow clearing or disconnecting if empty or null
-  if (rawId === null || rawId === "") {
+  // Check if clearing or disconnecting
+  const isDisconnect =
+    data.disconnect === true ||
+    data.action === "disconnect" ||
+    data.telegramChatId === null ||
+    data.chatId === null ||
+    data.telegramChatId === "" ||
+    data.chatId === "" ||
+    (typeof data.telegramChatId === "string" && data.telegramChatId.trim() === "") ||
+    (typeof data.chatId === "string" && data.chatId.trim() === "");
+
+  if (isDisconnect) {
     try {
       const db = getAdminDb();
       await db.doc(`users/${uid}/settings/telegram`).set(
         {
           telegramChatId: null,
+          disconnectedAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         },
         { merge: true }
@@ -818,7 +962,8 @@ app.post("/api/settings/telegram", verifyUserToken, async (req: Request, res: Re
     }
   }
 
-  const chatId = String(rawId).trim();
+  const rawId = data.telegramChatId !== undefined ? data.telegramChatId : data.chatId;
+  const chatId = String(rawId || "").trim();
   if (!/^-?\d+$/.test(chatId)) {
     return res.status(400).json({ error: "Invalid Telegram Chat ID. It must be a numeric string." });
   }

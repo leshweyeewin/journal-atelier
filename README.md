@@ -84,6 +84,11 @@ gcloud secrets add-iam-policy-binding GEMINI_API_KEY \
 gcloud secrets add-iam-policy-binding TELEGRAM_BOT_TOKEN \
   --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
   --role="roles/secretmanager.secretAccessor"
+
+# 4. Grant Cloud Datastore User role to allow Cloud Run backend to read/write Firestore
+gcloud projects add-iam-policy-binding $(gcloud config get-value project) \
+  --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
+  --role="roles/datastore.user"
 ```
 
 ### Telegram Bot Setup (optional feature)
