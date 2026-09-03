@@ -6,3 +6,7 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Firebase config carries the project's web API key — keep it out of the repo.
+# Copy firebase-applet-config.example.json to firebase-applet-config.json locally.
+firebase-applet-config.json
