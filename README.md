@@ -98,7 +98,18 @@ firebase deploy --only firestore:rules
    npm install
    ```
 
-2. **Configure Environment Variables:**
+2. **Configure the Firebase client config:**
+   The Firebase web config (project ID, web API key, authDomain, etc.) is kept out
+   of the repo. Copy the example and fill in your Firebase project's values:
+   ```bash
+   cp firebase-applet-config.example.json firebase-applet-config.json
+   ```
+   Populate it from **Firebase Console → Project settings → Your apps → SDK setup
+   and configuration**. Leave `recaptchaSiteKey` blank to disable App Check locally,
+   or set your reCAPTCHA v3 site key to enable it. This file is gitignored — never
+   commit it.
+
+3. **Configure Environment Variables:**
    Copy `.env.example` to `.env`:
    ```bash
    cp .env.example .env
@@ -108,13 +119,13 @@ firebase deploy --only firestore:rules
    GEMINI_API_KEY="AIzaSy..."
    ```
 
-3. **Start the Unified Server (Express + Vite):**
+4. **Start the Unified Server (Express + Vite):**
    ```bash
    npm run dev
    ```
    The application will be served at `http://localhost:3000`.
 
-4. **Verify TypeScript & Production Build:**
+5. **Verify TypeScript & Production Build:**
    ```bash
    npm run lint
    npm run build
