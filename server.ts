@@ -3,8 +3,18 @@ import path from "path";
 import dotenv from "dotenv";
 import { GoogleGenAI } from "@google/genai";
 import { createServer as createViteServer } from "vite";
+import { initializeApp, applicationDefault, getApps } from "firebase-admin/app";
+import { getAuth } from "firebase-admin/auth";
 
 dotenv.config();
+
+// Initialize the Firebase Admin SDK once. On Cloud Run this uses Application
+// Default Credentials (the runtime service account) — no service-account JSON in
+// the repo — and auto-discovers the project. It is required to cryptographically
+// verify Firebase ID tokens server-side (CLAUDE.md §3).
+if (getApps().length === 0) {
+  initializeApp({ credential: applicationDefault() });
+}
 
 const app = express();
 const PORT = 3000;
@@ -102,7 +112,12 @@ async function generateContentWithFallback(
   );
 }
 
-// Simple token authentication verification helper
+// Token authentication middleware (OWASP A01/A07 — Broken Access Control / Auth).
+// Cryptographically verifies the Firebase ID token against Google's public keys
+// via the Admin SDK, checking signature, issuer, audience and expiry. A forged or
+// tampered token (e.g. a hand-crafted JWT with an arbitrary user_id) is rejected —
+// the uid is trusted only because the signature proved it. NEVER decode the JWT
+// payload without verifying the signature.
 async function verifyUserToken(req: Request, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -115,34 +130,15 @@ async function verifyUserToken(req: Request, res: Response, next: NextFunction) 
   }
 
   try {
-    // Optionally verify with Google tokeninfo endpoint
-    // In dev / production environments without server private keys, this validates the JWT authenticity
-    const tokenInfoRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(token)}`);
-    if (tokenInfoRes.ok) {
-      const payload: any = await tokenInfoRes.json();
-      (req as any).user = {
-        uid: payload.sub || payload.user_id,
-        email: payload.email,
-      };
-      return next();
-    }
-    // If tokeninfo returned 400 (e.g. standard Firebase ID token format where aud is Firebase project),
-    // we can parse the JWT payload defensively while verifying basic signature structure
-    const parts = token.split(".");
-    if (parts.length === 3) {
-      const decodedPayload = JSON.parse(Buffer.from(parts[1], "base64").toString("utf-8"));
-      if (decodedPayload && (decodedPayload.user_id || decodedPayload.sub)) {
-        (req as any).user = {
-          uid: decodedPayload.user_id || decodedPayload.sub,
-          email: decodedPayload.email,
-        };
-        return next();
-      }
-    }
-    return res.status(401).json({ error: "Invalid authentication token payload." });
+    const decoded = await getAuth().verifyIdToken(token);
+    (req as any).user = {
+      uid: decoded.uid,
+      email: decoded.email,
+    };
+    return next();
   } catch (err: any) {
-    console.error("Token verification error:", err);
-    return res.status(401).json({ error: "Token verification failed." });
+    console.error("Token verification failed:", err?.message || err);
+    return res.status(401).json({ error: "Invalid or expired authentication token." });
   }
 }
 
