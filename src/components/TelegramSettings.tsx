@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Send, Check, X, Bell, AlertCircle, Loader2 } from "lucide-react";
-import { getTelegramSettings, saveTelegramSettings } from "../lib/geminiApi";
+import { getTelegramSettings, saveTelegramSettings, disconnectTelegramSettings } from "../lib/geminiApi";
 
 interface TelegramSettingsProps {
   onStatusChange?: (connected: boolean, chatId: string | null) => void;
@@ -54,6 +54,13 @@ export const TelegramSettings: React.FC<TelegramSettingsProps> = ({
     };
   }, []);
 
+  const handleStartEditing = () => {
+    setError(null);
+    setSuccessMsg(null);
+    setChatId(savedChatId || "");
+    setIsEditing(true);
+  };
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -92,7 +99,7 @@ export const TelegramSettings: React.FC<TelegramSettingsProps> = ({
     setSuccessMsg(null);
     try {
       setIsSaving(true);
-      await saveTelegramSettings(null);
+      await disconnectTelegramSettings();
       setIsConnected(false);
       setSavedChatId(null);
       setChatId("");
@@ -152,7 +159,7 @@ export const TelegramSettings: React.FC<TelegramSettingsProps> = ({
             <button
               id="telegram-edit-btn"
               type="button"
-              onClick={() => setIsEditing(true)}
+              onClick={handleStartEditing}
               className="text-xs text-stone-700 hover:text-stone-900 font-medium underline underline-offset-2 cursor-pointer"
             >
               Change ID
@@ -182,7 +189,10 @@ export const TelegramSettings: React.FC<TelegramSettingsProps> = ({
               pattern="^-?[0-9]+$"
               placeholder="e.g. 123456789"
               value={chatId}
-              onChange={(e) => setChatId(e.target.value)}
+              onChange={(e) => {
+                setChatId(e.target.value);
+                if (error) setError(null);
+              }}
               className="w-full text-xs px-3 py-1.5 rounded-md border border-stone-300 bg-white text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-1 focus:ring-stone-800"
               required
             />
@@ -234,6 +244,7 @@ export const TelegramSettings: React.FC<TelegramSettingsProps> = ({
                   setIsEditing(false);
                   setChatId(savedChatId || "");
                   setError(null);
+                  setSuccessMsg(null);
                 }}
                 className="text-xs text-stone-600 hover:text-stone-900 px-2 py-1.5 rounded cursor-pointer"
               >

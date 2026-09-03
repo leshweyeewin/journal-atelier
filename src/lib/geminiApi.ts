@@ -151,7 +151,38 @@ export async function getTelegramSettings(): Promise<TelegramSettingsResponse> {
   return await response.json();
 }
 
+export async function disconnectTelegramSettings(): Promise<TelegramSettingsResponse> {
+  const token = await getIdToken();
+  if (!token) {
+    throw new Error("Authentication session expired. Please sign in again.");
+  }
+
+  const response = await fetch("/api/settings/telegram", {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    let errorMsg = "Failed to disconnect Telegram.";
+    try {
+      const errorJson = await response.json();
+      if (errorJson.error) errorMsg = errorJson.error;
+    } catch {
+      errorMsg = `Server returned status ${response.status}`;
+    }
+    throw new Error(errorMsg);
+  }
+
+  return await response.json();
+}
+
 export async function saveTelegramSettings(chatId: string | null): Promise<TelegramSettingsResponse> {
+  if (chatId === null || chatId === "") {
+    return await disconnectTelegramSettings();
+  }
+
   const token = await getIdToken();
   if (!token) {
     throw new Error("Authentication session expired. Please sign in again.");

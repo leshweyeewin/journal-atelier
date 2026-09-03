@@ -108,7 +108,7 @@ export default function App() {
     setActiveId(entry.id);
     setTitle(entry.title || "");
     setContent(entry.content || "");
-    setMode(entry.mode || "reflect");
+    setMode(entry.mode === "summarize" ? "reflect" : entry.mode || "reflect");
     setMessages(entry.messages || []);
     setAgentLoadingState(null);
     if (

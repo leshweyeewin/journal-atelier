@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Sparkles,
   Tag,
@@ -9,6 +9,8 @@ import {
   HelpCircle,
   Brain,
   Smile,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { SummaryResult } from "../types";
 
@@ -32,6 +34,17 @@ export const SummaryCard: React.FC<SummaryCardProps> = ({
   onApplyTitle,
   onClose,
 }) => {
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const prevSummaryRef = useRef(summary);
+
+  useEffect(() => {
+    // When fresh results arrive or results change, default to expanded state
+    if (summary && summary !== prevSummaryRef.current) {
+      setIsCollapsed(false);
+    }
+    prevSummaryRef.current = summary;
+  }, [summary]);
+
   const isAgentWorking =
     agentLoadingState &&
     (agentLoadingState.reflection ||
@@ -69,6 +82,84 @@ export const SummaryCard: React.FC<SummaryCardProps> = ({
       : "0.9";
   const sentimentTag = summary?.sentiment?.tag || summary?.mood;
 
+  // Collapsed single summary bar
+  if (isCollapsed && !isAgentWorking) {
+    return (
+      <div
+        id="ai-summary-card"
+        className="rounded-2xl border border-amber-200/90 bg-linear-to-br from-amber-50/80 via-white to-stone-50 px-4 py-3 shadow-xs mb-6 transition-all duration-200"
+      >
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          {/* Left: Reflection ready + Suggested Title + Mood Tag */}
+          <div
+            onClick={() => setIsCollapsed(false)}
+            className="flex items-center gap-2.5 flex-1 min-w-[200px] cursor-pointer group"
+          >
+            <div className="w-7 h-7 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center border border-amber-200/80 shadow-2xs shrink-0">
+              <Sparkles className="w-3.5 h-3.5 text-amber-700" />
+            </div>
+
+            <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-900 bg-amber-100/90 px-2 py-0.5 rounded-md border border-amber-200/80 shrink-0">
+              Reflection ready
+            </span>
+
+            {summary?.suggestedTitle && (
+              <span className="text-xs font-semibold text-stone-800 truncate max-w-xs sm:max-w-md group-hover:text-amber-950 transition">
+                "{summary.suggestedTitle}"
+              </span>
+            )}
+
+            {sentimentTag && (
+              <span
+                id="sentiment-mood-badge"
+                className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100/90 text-amber-950 border border-amber-300 shadow-2xs shrink-0"
+              >
+                <HeartHandshake className="w-3 h-3 text-amber-800" />
+                <span>{sentimentTag}</span>
+              </span>
+            )}
+          </div>
+
+          {/* Right: Actions (Use Title, Expand Chevron, Dismiss) */}
+          <div className="flex items-center gap-2 shrink-0">
+            {summary?.suggestedTitle && onApplyTitle && (
+              <button
+                id="apply-suggested-title-btn"
+                type="button"
+                onClick={() => onApplyTitle(summary.suggestedTitle!)}
+                className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-md bg-white border border-stone-200 text-stone-700 hover:bg-stone-50 transition cursor-pointer shadow-2xs"
+              >
+                <Check className="w-3 h-3 text-emerald-600" />
+                <span className="hidden sm:inline">Use Title</span>
+              </button>
+            )}
+
+            <button
+              id="toggle-summary-collapse-btn"
+              type="button"
+              onClick={() => setIsCollapsed(false)}
+              className="inline-flex items-center gap-1 text-xs font-medium text-amber-950 bg-amber-100/80 hover:bg-amber-100 px-2.5 py-1 rounded-md border border-amber-200/80 transition cursor-pointer"
+            >
+              <span>Expand</span>
+              <ChevronDown className="w-3.5 h-3.5 text-amber-800" />
+            </button>
+
+            {onClose && (
+              <button
+                id="close-summary-card-btn"
+                type="button"
+                onClick={onClose}
+                className="text-xs text-stone-400 hover:text-stone-700 px-2 py-1 rounded-md hover:bg-stone-100 transition cursor-pointer"
+              >
+                Dismiss
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       id="ai-summary-card"
@@ -98,7 +189,7 @@ export const SummaryCard: React.FC<SummaryCardProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-2 self-end sm:self-auto">
+        <div className="flex items-center gap-2 self-end sm:self-auto flex-wrap">
           {/* Sentiment Badge: "Sentiment: {tag} · {confidence}" */}
           {sentimentTag && (
             <span
@@ -112,9 +203,22 @@ export const SummaryCard: React.FC<SummaryCardProps> = ({
             </span>
           )}
 
+          {/* Collapse Toggle */}
+          <button
+            id="toggle-summary-collapse-btn"
+            type="button"
+            onClick={() => setIsCollapsed(true)}
+            className="inline-flex items-center gap-1 text-xs text-stone-500 hover:text-stone-800 px-2 py-1 rounded-md hover:bg-stone-100 transition cursor-pointer"
+            title="Collapse reflection summary"
+          >
+            <ChevronUp className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Collapse</span>
+          </button>
+
           {onClose && (
             <button
               id="close-summary-card-btn"
+              type="button"
               onClick={onClose}
               className="text-xs text-stone-400 hover:text-stone-700 px-2 py-1 rounded-md hover:bg-stone-100 transition cursor-pointer"
             >
