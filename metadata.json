@@ -1,5 +1,5 @@
 {
-  "name": "Gemini Reflection Journal",
+  "name": "Journal Atelier",
   "description": "User-authenticated multi-turn reflection journal and AI brainstorming companion powered by Gemini 3.6 Flash and isolated Cloud Firestore storage.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

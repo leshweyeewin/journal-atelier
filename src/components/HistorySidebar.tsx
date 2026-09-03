@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Search, Calendar, Trash2, Tag, ChevronRight, BookMarked, Sparkles } from "lucide-react";
 import { JournalInteraction } from "../types";
+import { TelegramSettings } from "./TelegramSettings";
 
 interface HistorySidebarProps {
   entries: JournalInteraction[];
@@ -8,6 +9,7 @@ interface HistorySidebarProps {
   onSelectEntry: (entry: JournalInteraction) => void;
   onDeleteEntry: (id: string, e: React.MouseEvent) => void;
   isLoading?: boolean;
+  onTelegramStatusChange?: (connected: boolean, chatId: string | null) => void;
 }
 
 export const HistorySidebar: React.FC<HistorySidebarProps> = ({
@@ -16,6 +18,7 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
   onSelectEntry,
   onDeleteEntry,
   isLoading,
+  onTelegramStatusChange,
 }) => {
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -145,6 +148,9 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
           })
         )}
       </div>
+
+      {/* Telegram Notifications Settings Panel */}
+      <TelegramSettings onStatusChange={onTelegramStatusChange} />
     </aside>
   );
 };

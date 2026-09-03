@@ -9,6 +9,7 @@ import { JournalEditor } from "./components/JournalEditor";
 import { ChatStream } from "./components/ChatStream";
 import { SummaryCard, AgentLoadingState } from "./components/SummaryCard";
 import { ErrorBanner } from "./components/ErrorBanner";
+import { TelegramSettings } from "./components/TelegramSettings";
 import {
   saveInteraction,
   subscribeUserInteractions,
@@ -43,6 +44,8 @@ export default function App() {
   const [isAiSummarizing, setIsAiSummarizing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [failedSavePayload, setFailedSavePayload] = useState<Partial<JournalInteraction> | null>(null);
+  const [isTelegramConnected, setIsTelegramConnected] = useState(false);
+  const [isTelegramModalOpen, setIsTelegramModalOpen] = useState(false);
 
   // Listen to Firebase Authentication state
   useEffect(() => {
@@ -362,7 +365,7 @@ export default function App() {
     return (
       <div className="min-h-screen bg-stone-50 flex flex-col items-center justify-center p-6 text-stone-600">
         <div className="w-8 h-8 border-2 border-stone-300 border-t-stone-800 rounded-full animate-spin mb-4" />
-        <p className="text-sm font-medium">Connecting to Reflection Studio...</p>
+        <p className="text-sm font-medium">Connecting to Journal Atelier...</p>
       </div>
     );
   }
@@ -379,6 +382,8 @@ export default function App() {
         user={currentUser}
         onNewEntry={handleNewEntry}
         isSaving={isSaving}
+        isTelegramConnected={isTelegramConnected}
+        onOpenTelegramSettings={() => setIsTelegramModalOpen(true)}
       />
 
       {/* Main App Layout */}
@@ -390,9 +395,10 @@ export default function App() {
           onSelectEntry={handleSelectEntry}
           onDeleteEntry={handleDeleteEntry}
           isLoading={listLoading}
+          onTelegramStatusChange={(connected) => setIsTelegramConnected(connected)}
         />
 
-        {/* Main Stage: Active Reflection Studio */}
+        {/* Main Stage: Active Journal Atelier */}
         <main className="flex-1 p-4 sm:p-6 overflow-y-auto flex flex-col">
           {/* Error Banner with guaranteed retry */}
           {errorMessage && (
@@ -453,6 +459,15 @@ export default function App() {
           </div>
         </main>
       </div>
+
+      {/* Telegram Notifications Settings Modal */}
+      {isTelegramModalOpen && (
+        <TelegramSettings
+          isOpenModal={true}
+          onCloseModal={() => setIsTelegramModalOpen(false)}
+          onStatusChange={(connected) => setIsTelegramConnected(connected)}
+        />
+      )}
     </div>
   );
 }

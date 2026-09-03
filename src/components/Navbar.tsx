@@ -1,26 +1,33 @@
 import React from "react";
-import { BookOpen, LogOut, Plus, ShieldCheck, Sparkles, User as UserIcon } from "lucide-react";
+import { LogOut, Plus, ShieldCheck, User as UserIcon, Send } from "lucide-react";
 import { AppUser } from "../types";
 import { logOut } from "../firebase";
+import { LogoMark } from "./LogoMark";
 
 interface NavbarProps {
   user: AppUser;
   onNewEntry: () => void;
   isSaving?: boolean;
+  isTelegramConnected?: boolean;
+  onOpenTelegramSettings?: () => void;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ user, onNewEntry, isSaving }) => {
+export const Navbar: React.FC<NavbarProps> = ({
+  user,
+  onNewEntry,
+  isSaving,
+  isTelegramConnected,
+  onOpenTelegramSettings,
+}) => {
   return (
     <header className="w-full bg-white border-b border-stone-200 sticky top-0 z-30 shadow-xs">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
         {/* Left branding */}
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-stone-900 text-stone-50 flex items-center justify-center shadow-xs">
-            <BookOpen className="w-4 h-4 text-amber-300" />
-          </div>
+          <LogoMark size={32} />
           <div>
             <div className="flex items-center gap-2">
-              <span className="font-semibold text-stone-900 text-base tracking-tight">Reflection Studio</span>
+              <span className="font-semibold text-stone-900 text-base tracking-tight">Journal Atelier</span>
               <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
                 <ShieldCheck className="w-3 h-3" />
                 Isolated Firestore
@@ -31,6 +38,31 @@ export const Navbar: React.FC<NavbarProps> = ({ user, onNewEntry, isSaving }) =>
 
         {/* Center / Action */}
         <div className="flex items-center gap-3">
+          {/* Subtle Telegram Connected Indicator */}
+          {isTelegramConnected ? (
+            <button
+              id="nav-telegram-status-btn"
+              onClick={onOpenTelegramSettings}
+              type="button"
+              className="hidden sm:inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full bg-sky-50 text-sky-700 border border-sky-200/80 hover:bg-sky-100 transition cursor-pointer"
+              title="Telegram notifications active (click to manage)"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-sky-500" />
+              <span>Telegram: connected</span>
+            </button>
+          ) : (
+            <button
+              id="nav-telegram-config-btn"
+              onClick={onOpenTelegramSettings}
+              type="button"
+              className="hidden md:inline-flex items-center gap-1 text-xs text-stone-500 hover:text-stone-800 px-2 py-1 rounded-md hover:bg-stone-100 transition cursor-pointer"
+              title="Configure Telegram notifications"
+            >
+              <Send className="w-3.5 h-3.5 text-stone-400" />
+              <span>Telegram</span>
+            </button>
+          )}
+
           {isSaving && (
             <span className="hidden md:inline-flex items-center gap-1.5 text-xs text-stone-500 font-medium">
               <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />

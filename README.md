@@ -1,4 +1,4 @@
-# Gemini Reflection Journal & Brainstorming Studio
+# Journal Atelier
 
 A production-grade, user-authenticated reflection journal and multi-turn brainstorming companion powered by **Gemini 3.6 Flash** and **Google Cloud Firestore**, secured with **Firebase Authentication** (Google Sign-In) and owner-bound database rules.
 
@@ -32,6 +32,13 @@ A production-grade, user-authenticated reflection journal and multi-turn brainst
    - The **Pattern** agent surfaces recurring themes from the user's own history; its Firestore read path is hardcoded to `/users/{uid}/interactions` with `uid` bound only from the verified ID token — never from the request body or model output — so themes can never cross tenants.
    - The journal entry is treated as untrusted data inside a delimited block (never as instructions), defending against indirect prompt injection (OWASP LLM01). A single agent's failure degrades gracefully without failing the run.
 
+6. **Outbound-Only Telegram Notifications (Section 11)**:
+   - Provides optional real-time push notifications to the user's Telegram chat upon reflection synthesis.
+   - **Outbound-only & closed-loop**: No inbound webhooks, bot commands, or polling.
+   - Destination host is strictly hardcoded to `https://api.telegram.org/bot<token>/sendMessage` (SSRF prevention).
+   - Minimal payload: sends only suggested title, sentiment tag, and the Coach question (plain text, escaped) — never the full raw journal text.
+   - `TELEGRAM_BOT_TOKEN` is maintained server-side via Secret Manager; chat IDs are stored isolated at `/users/{uid}/settings/telegram`.
+
 ---
 
 ## 1. Environment & Prerequisites
@@ -55,12 +62,16 @@ gcloud services enable \
 
 ## 2. Secret Management Setup
 
-Store your Gemini API key in **Google Cloud Secret Manager** and grant access to the Cloud Run runtime service account:
+Store your operational secrets (`GEMINI_API_KEY` and optional `TELEGRAM_BOT_TOKEN`) in **Google Cloud Secret Manager** and grant access to the Cloud Run runtime service account:
 
 ```bash
-# 1. Create and populate the secret
+# 1. Create and populate Gemini API Key secret
 gcloud secrets create GEMINI_API_KEY --replication-policy="automatic"
 echo -n "YOUR_GEMINI_API_KEY" | gcloud secrets versions add GEMINI_API_KEY --data-file=-
+
+# (Optional) Create and populate Telegram Bot Token secret
+gcloud secrets create TELEGRAM_BOT_TOKEN --replication-policy="automatic"
+echo -n "YOUR_TELEGRAM_BOT_TOKEN" | gcloud secrets versions add TELEGRAM_BOT_TOKEN --data-file=-
 
 # 2. Identify your GCP project number
 PROJECT_NUMBER=$(gcloud projects describe $(gcloud config get-value project) --format="value(projectNumber)")
@@ -69,20 +80,30 @@ PROJECT_NUMBER=$(gcloud projects describe $(gcloud config get-value project) --f
 gcloud secrets add-iam-policy-binding GEMINI_API_KEY \
   --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
   --role="roles/secretmanager.secretAccessor"
+
+gcloud secrets add-iam-policy-binding TELEGRAM_BOT_TOKEN \
+  --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
+  --role="roles/secretmanager.secretAccessor"
 ```
 
 ---
 
 ## 3. Database Security Configuration (Cloud Firestore)
 
-Ensure your Cloud Firestore database is provisioned in Native Mode. Deploy the following security rules:
+Ensure your Cloud Firestore database is provisioned in Native Mode. Deploy the following owner-bound security rules:
 
 ### `firestore.rules`
 ```javascript
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // User-isolated interactions and journal entries
     match /users/{userId}/interactions/{interactionId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // User-isolated settings (e.g. Telegram chat ID, preferences)
+    match /users/{userId}/settings/{settingId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
   }
@@ -147,13 +168,13 @@ Deploy the application as a containerized service to **Google Cloud Run**:
 REGION="us-central1"
 SERVICE_NAME="gemini-reflection-journal"
 
-# Deploy directly from source with the secret injected as an environment variable
+# Deploy directly from source with the secrets injected as environment variables
 gcloud run deploy ${SERVICE_NAME} \
   --source . \
   --region ${REGION} \
   --platform managed \
   --allow-unauthenticated \
-  --set-secrets="GEMINI_API_KEY=GEMINI_API_KEY:latest"
+  --set-secrets="GEMINI_API_KEY=GEMINI_API_KEY:latest,TELEGRAM_BOT_TOKEN=TELEGRAM_BOT_TOKEN:latest"
 ```
 
 ---
@@ -190,3 +211,6 @@ Every user-facing action and workflow has been verified:
 | **TC-12** | Server-Bound uid (IDOR attempt) | 1. In devtools, call `POST /api/reflect` with a body like `{"uid":"<another user's uid>", "entry":"..."}` and a valid token for User B. | The injected `uid` is ignored; the run uses only the token-derived uid (B). The Pattern agent reads only B's partition. No cross-user data is returned. |
 | **TC-13** | Broken-Auth Rejection (A01/A07) | 1. Call `POST /api/reflect` with no `Authorization` header.<br>2. Call it again with a hand-crafted JWT (`header.{"user_id":"victim"}.junk`). | Both return **401**; nothing is written. `firebase-admin verifyIdToken` rejects the forged token because its signature fails verification. |
 | **TC-14** | Agent Degradation (resilience) | 1. Force one agent (e.g. Pattern) to fail past the fallback ladder (simulated 503). | That agent's section is omitted and its chip dims, but Reflection + Sentiment + Coach still render and persist. The run does not return 500. |
+| **TC-15** | Telegram Chat ID Configuration | 1. Sign in.<br>2. In the Telegram settings area, enter numeric chat ID (obtained from `@userinfobot`).<br>3. Click **"Save ID"**.<br>4. Enter non-numeric text (`abc`). | Numeric ID persists to `/users/{uid}/settings/telegram`; subtle **"Telegram: connected"** badge appears in both Navbar and sidebar. Non-numeric entry is rejected client-side and returns 400 server-side. |
+| **TC-16** | Outbound Telegram Dispatch | 1. Configure Telegram Chat ID.<br>2. Write a reflection and click **"Synthesize & Tag"**.<br>3. Observe server logs and Telegram bot. | After reflection persists to Firestore, server reads `telegramChatId` from `/users/{uid}/settings` and dispatches minimal payload (suggested title, mood tag, Coach question). Raw journal content is never transmitted. |
+| **TC-17** | Telegram Failure Non-Blocking Isolation | 1. Provide an unreachable or unconfigured Telegram token / chat ID.<br>2. Click **"Synthesize & Tag"**. | Reflection synthesis, Firestore persistence, and UI card rendering complete successfully (200 OK). Server catches the Telegram failure gracefully and logs a warning without throwing or interrupting the reflection run. |

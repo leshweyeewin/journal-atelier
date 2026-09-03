@@ -266,6 +266,85 @@ const VALID_SENTIMENT_TAGS = [
 ] as const;
 
 /**
+ * Outbound-only Telegram notification helper (Section 11 External Notification Security).
+ * 1. Reads TELEGRAM_BOT_TOKEN from process.env (Secret Manager), server-side only. Never expose to client or log.
+ * 2. POSTs strictly to https://api.telegram.org/bot<token>/sendMessage — host hardcoded, no dynamic URLs.
+ * 3. Wrapped in try/catch; on failure, logs and returns false. It must never throw.
+ */
+async function sendTelegram(chatId: string, text: string): Promise<boolean> {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token || !token.trim()) {
+    console.info("[Telegram] Notification skipped: TELEGRAM_BOT_TOKEN not configured in environment.");
+    return false;
+  }
+
+  if (!chatId || !/^-?\d+$/.test(chatId)) {
+    console.warn("[Telegram] Notification skipped: invalid numeric chatId format.");
+    return false;
+  }
+
+  try {
+    const url = `https://api.telegram.org/bot${token.trim()}/sendMessage`;
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: text,
+      }),
+    });
+
+    if (!response.ok) {
+      const errBody = await response.text().catch(() => "");
+      console.warn(`[Telegram] API returned status ${response.status}:`, errBody.slice(0, 200));
+      return false;
+    }
+
+    return true;
+  } catch (err: any) {
+    console.warn("[Telegram] Outbound request failed:", err?.message || err);
+    return false;
+  }
+}
+
+/**
+ * Look up the requesting user's telegramChatId from /users/{uid}/settings using firebase-admin firestore.
+ * uid comes from the verified token only.
+ */
+async function getTelegramChatIdForUser(uid: string): Promise<string | null> {
+  try {
+    const db = getAdminDb();
+    // 1. Check doc users/{uid}/settings/telegram
+    const telegramDoc = await db.doc(`users/${uid}/settings/telegram`).get();
+    if (telegramDoc.exists) {
+      const val = telegramDoc.data()?.telegramChatId;
+      if (typeof val === "string" && val.trim()) return val.trim();
+    }
+
+    // 2. Check doc users/{uid}/settings/general
+    const generalDoc = await db.doc(`users/${uid}/settings/general`).get();
+    if (generalDoc.exists) {
+      const val = generalDoc.data()?.telegramChatId;
+      if (typeof val === "string" && val.trim()) return val.trim();
+    }
+
+    // 3. Fallback: inspect any document under users/{uid}/settings
+    const settingsSnap = await db.collection(`users/${uid}/settings`).limit(5).get();
+    for (const doc of settingsSnap.docs) {
+      const val = doc.data()?.telegramChatId;
+      if (typeof val === "string" && val.trim()) return val.trim();
+    }
+
+    return null;
+  } catch (err) {
+    console.warn("[Telegram] Error retrieving telegramChatId from settings:", err);
+    return null;
+  }
+}
+
+/**
  * Multi-Agent Reflection Endpoint (Section 10 Multi-Agent Journaling Brain)
  *
  * Security & Execution Walkthrough:
@@ -583,7 +662,69 @@ Return a JSON object with 'reflection', 'suggestedTitle', and 'tags':\n\n${delim
       });
     }
 
+    // 5. Guaranteed Transactional Persistence & Outbound Telegram Notification
+    // (Section 10 Multi-Agent Orchestration & Section 11 Telegram Integration)
+    const db = getAdminDb();
+    const interactionId =
+      (typeof data.interactionId === "string" && data.interactionId.trim()) ||
+      (typeof data.id === "string" && data.id.trim()) ||
+      db.collection(`users/${uid}/interactions`).doc().id;
+
+    try {
+      await db.doc(`users/${uid}/interactions/${interactionId}`).set(
+        {
+          id: interactionId,
+          userId: uid,
+          content: entryText,
+          title: suggestedTitle || data.title || "Untitled Reflection",
+          reflection: reflection || "",
+          sentiment: sentiment || null,
+          mood: sentiment?.tag || "",
+          themes: themes || [],
+          coachPrompt: coachPrompt || "",
+          tags: tags || [],
+          summary: reflection || "",
+          insights: themes || [],
+          modelUsed: lastModelUsed,
+          updatedAt: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+    } catch (saveErr) {
+      console.warn("[MultiAgentReflect] Firestore persistence warning in /api/reflect:", saveErr);
+    }
+
+    // Look up requesting user's telegramChatId from /users/{uid}/settings using firebase-admin firestore
+    // (uid from the verified token only). If present, send minimal message:
+    // suggested title, sentiment tag, Coach question — escaped plain text, NOT the full entry.
+    try {
+      const telegramChatId = await getTelegramChatIdForUser(uid);
+      if (telegramChatId) {
+        const cleanTitle = suggestedTitle
+          ? suggestedTitle.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "").trim()
+          : "";
+        const cleanSentiment = sentiment?.tag
+          ? sentiment.tag.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "").trim()
+          : "";
+        const cleanCoach = coachPrompt
+          ? coachPrompt.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "").trim()
+          : "";
+
+        const lines: string[] = ["✨ Journal Atelier — Reflection Synthesized"];
+        if (cleanTitle) lines.push(`Title: ${cleanTitle}`);
+        if (cleanSentiment) lines.push(`Mood: ${cleanSentiment}`);
+        if (cleanCoach) lines.push(`Coach Question: ${cleanCoach}`);
+
+        const notificationText = lines.join("\n\n");
+        await sendTelegram(telegramChatId, notificationText);
+      }
+    } catch (tgErr) {
+      console.warn("[Telegram] Outbound notification delivery warning in /api/reflect:", tgErr);
+    }
+
     const payload: {
+      id?: string;
       suggestedTitle?: string;
       reflection?: string;
       sentiment?: { tag: string; confidence: number };
@@ -596,6 +737,7 @@ Return a JSON object with 'reflection', 'suggestedTitle', and 'tags':\n\n${delim
       modelUsed: string;
       timestamp: number;
     } = {
+      id: interactionId,
       modelUsed: lastModelUsed,
       timestamp: Date.now(),
     };
@@ -633,6 +775,75 @@ Return a JSON object with 'reflection', 'suggestedTitle', and 'tags':\n\n${delim
 
 // Multi-Agent Reflection Endpoint
 app.post("/api/reflect", verifyUserToken, handleMultiAgentReflect);
+
+// Outbound Telegram Settings Endpoints (Section 11 External Notification Security)
+app.get("/api/settings/telegram", verifyUserToken, async (req: Request, res: Response) => {
+  const uid = (req as any).user?.uid;
+  if (!uid) return res.status(401).json({ error: "Unauthorized" });
+
+  try {
+    const chatId = await getTelegramChatIdForUser(uid);
+    return res.json({
+      telegramChatId: chatId || null,
+      connected: Boolean(chatId),
+    });
+  } catch (err: any) {
+    console.error("Failed to read telegram settings:", err);
+    return res.status(500).json({ error: "Failed to read telegram settings." });
+  }
+});
+
+app.post("/api/settings/telegram", verifyUserToken, async (req: Request, res: Response) => {
+  const uid = (req as any).user?.uid;
+  if (!uid) return res.status(401).json({ error: "Unauthorized" });
+
+  const data = req.body && typeof req.body === "object" ? req.body : {};
+  const rawId = data.telegramChatId ?? data.chatId;
+
+  // Allow clearing or disconnecting if empty or null
+  if (rawId === null || rawId === "") {
+    try {
+      const db = getAdminDb();
+      await db.doc(`users/${uid}/settings/telegram`).set(
+        {
+          telegramChatId: null,
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+      return res.json({ success: true, connected: false, telegramChatId: null });
+    } catch (err: any) {
+      console.error("Failed to clear telegram settings:", err);
+      return res.status(500).json({ error: "Failed to clear telegram settings." });
+    }
+  }
+
+  const chatId = String(rawId).trim();
+  if (!/^-?\d+$/.test(chatId)) {
+    return res.status(400).json({ error: "Invalid Telegram Chat ID. It must be a numeric string." });
+  }
+
+  try {
+    const db = getAdminDb();
+    // Save { telegramChatId } to /users/{uid}/settings/telegram
+    await db.doc(`users/${uid}/settings/telegram`).set(
+      {
+        telegramChatId: chatId,
+        updatedAt: new Date().toISOString(),
+      },
+      { merge: true }
+    );
+
+    return res.json({
+      success: true,
+      connected: true,
+      telegramChatId: chatId,
+    });
+  } catch (err: any) {
+    console.error("Failed to save telegram settings:", err);
+    return res.status(500).json({ error: "Failed to save telegram settings." });
+  }
+});
 
 // Vite middleware and static serving
 async function startServer() {
