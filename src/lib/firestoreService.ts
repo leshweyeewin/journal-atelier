@@ -62,6 +62,10 @@ export async function saveInteraction(
     tags: entry.tags || [],
     mood: entry.mood || "",
     modelUsed: entry.modelUsed || "gemini-3.6-flash",
+    reflection: entry.reflection !== undefined ? entry.reflection : undefined,
+    sentiment: entry.sentiment !== undefined ? entry.sentiment : undefined,
+    themes: Array.isArray(entry.themes) ? entry.themes : undefined,
+    coachPrompt: entry.coachPrompt !== undefined ? entry.coachPrompt : undefined,
     createdAt: entry.createdAt || now,
     updatedAt: now,
   };

@@ -26,7 +26,9 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
     const contentMatch = item.content?.toLowerCase().includes(q);
     const tagMatch = item.tags?.some((t) => t.toLowerCase().includes(q));
     const moodMatch = item.mood?.toLowerCase().includes(q);
-    return titleMatch || contentMatch || tagMatch || moodMatch;
+    const themeMatch = item.themes?.some((t) => t.toLowerCase().includes(q));
+    const coachMatch = item.coachPrompt?.toLowerCase().includes(q);
+    return titleMatch || contentMatch || tagMatch || moodMatch || themeMatch || coachMatch;
   });
 
   const formatDate = (timestamp: number) => {

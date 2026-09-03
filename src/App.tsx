@@ -7,14 +7,17 @@ import { LandingPage } from "./components/LandingPage";
 import { HistorySidebar } from "./components/HistorySidebar";
 import { JournalEditor } from "./components/JournalEditor";
 import { ChatStream } from "./components/ChatStream";
-import { SummaryCard } from "./components/SummaryCard";
+import { SummaryCard, AgentLoadingState } from "./components/SummaryCard";
 import { ErrorBanner } from "./components/ErrorBanner";
 import {
   saveInteraction,
   subscribeUserInteractions,
   deleteInteraction,
 } from "./lib/firestoreService";
-import { callGeminiChat, callGeminiSummarize } from "./lib/geminiApi";
+import {
+  callGeminiChat,
+  callMultiAgentReflect,
+} from "./lib/geminiApi";
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
@@ -31,6 +34,7 @@ export default function App() {
   const [mode, setMode] = useState<ReflectionMode>("reflect");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [summaryData, setSummaryData] = useState<SummaryResult | null>(null);
+  const [agentLoadingState, setAgentLoadingState] = useState<AgentLoadingState | null>(null);
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
 
   // UI operation states
@@ -90,6 +94,7 @@ export default function App() {
     setMode("reflect");
     setMessages([]);
     setSummaryData(null);
+    setAgentLoadingState(null);
     setLastSavedAt(null);
     setErrorMessage(null);
     setFailedSavePayload(null);
@@ -102,13 +107,26 @@ export default function App() {
     setContent(entry.content || "");
     setMode(entry.mode || "reflect");
     setMessages(entry.messages || []);
-    if (entry.summary || entry.insights?.length) {
+    setAgentLoadingState(null);
+    if (
+      entry.summary ||
+      entry.insights?.length ||
+      entry.reflection ||
+      entry.sentiment ||
+      entry.themes?.length ||
+      entry.coachPrompt ||
+      entry.mood
+    ) {
       setSummaryData({
         suggestedTitle: entry.title,
         summary: entry.summary,
         insights: entry.insights,
         tags: entry.tags,
-        mood: entry.mood,
+        mood: entry.sentiment?.tag || entry.mood,
+        reflection: entry.reflection,
+        sentiment: entry.sentiment,
+        themes: entry.themes,
+        coachPrompt: entry.coachPrompt,
         modelUsed: entry.modelUsed,
       });
     } else {
@@ -138,7 +156,7 @@ export default function App() {
 
   // Guaranteed Transactional Save to Firestore
   const persistToFirestore = async (override?: Partial<JournalInteraction>) => {
-    if (!currentUser) return;
+    if (!currentUser) return null;
     setIsSaving(true);
     setErrorMessage(null);
 
@@ -151,27 +169,91 @@ export default function App() {
       summary: summaryData?.summary || "",
       insights: summaryData?.insights || [],
       tags: summaryData?.tags || [],
-      mood: summaryData?.mood || "",
+      mood: summaryData?.sentiment?.tag || summaryData?.mood || "",
+      reflection: summaryData?.reflection || "",
+      sentiment: summaryData?.sentiment,
+      themes: summaryData?.themes || [],
+      coachPrompt: summaryData?.coachPrompt || "",
       modelUsed: summaryData?.modelUsed || "gemini-3.6-flash",
       ...override,
     };
 
     try {
-      await saveInteraction(currentUser.uid, payloadToSave);
+      const saved = await saveInteraction(currentUser.uid, payloadToSave);
       setLastSavedAt(Date.now());
       setFailedSavePayload(null);
+      return saved;
     } catch (err: any) {
       console.error("Firestore save error:", err);
       setErrorMessage("Could not save to Firestore. Your unsaved text has been kept intact.");
       setFailedSavePayload(payloadToSave);
+      return null;
     } finally {
       setIsSaving(false);
     }
   };
 
-  // Explicit Save button click
-  const handleManualSave = () => {
-    persistToFirestore();
+  // Multi-Agent Analysis Runner (Section 10 Orchestration)
+  // Shows per-agent loading state, updates UI state, and updates Firestore
+  const runMultiAgentAnalysis = async (targetId: string, entryContent: string) => {
+    if (!entryContent.trim() || !currentUser) return;
+    setAgentLoadingState({ reflection: true, sentiment: true, pattern: true, coach: true });
+
+    try {
+      const result = await callMultiAgentReflect(entryContent);
+
+      const updatedSummary: SummaryResult = {
+        ...(summaryData || {}),
+        suggestedTitle: result.suggestedTitle,
+        reflection: result.reflection,
+        sentiment: result.sentiment,
+        themes: result.themes,
+        coachPrompt: result.coachPrompt,
+        tags: result.tags,
+        summary: result.reflection,
+        insights: result.themes,
+        mood: result.sentiment?.tag || summaryData?.mood,
+        modelUsed: result.modelUsed || summaryData?.modelUsed,
+      };
+
+      setSummaryData(updatedSummary);
+
+      if (result.suggestedTitle && !title.trim()) {
+        setTitle(result.suggestedTitle);
+      }
+
+      // Persist reflection, sentiment, themes, and coach prompt onto the same users/{uid}/interactions document
+      await persistToFirestore({
+        id: targetId,
+        title: title.trim() || result.suggestedTitle || "Untitled Reflection",
+        reflection: result.reflection || "",
+        sentiment: result.sentiment,
+        themes: result.themes || [],
+        coachPrompt: result.coachPrompt || "",
+        tags: result.tags || [],
+        summary: result.reflection || "",
+        insights: result.themes || [],
+        mood: result.sentiment?.tag || "",
+        modelUsed: result.modelUsed,
+      });
+    } catch (err: any) {
+      console.warn("Multi-agent reflection analysis warning:", err);
+      // Soft-fail: Do not overwrite the saved entry or crash UI
+    } finally {
+      setAgentLoadingState(null);
+    }
+  };
+
+  // Explicit Save button click: saves entry and then triggers multi-agent reflection
+  const handleManualSave = async () => {
+    if (!content.trim()) return;
+    const currentId = activeId;
+    const currentContent = content;
+
+    const saved = await persistToFirestore();
+    if (saved && currentContent.trim()) {
+      await runMultiAgentAnalysis(currentId, currentContent);
+    }
   };
 
   // Reflect with Gemini based on user's current written reflection
@@ -259,32 +341,17 @@ export default function App() {
     }
   };
 
-  // AI Summarize & Synthesize action
+  // Unified Synthesize action: triggers the 4-agent reflection pipeline
   const handleSummarizeWithAI = async () => {
     if (!content.trim() || !currentUser) return;
     setIsAiSummarizing(true);
     setErrorMessage(null);
 
     try {
-      const summaryResult = await callGeminiSummarize(content, title);
-      setSummaryData(summaryResult);
-
-      if (summaryResult.suggestedTitle && !title.trim()) {
-        setTitle(summaryResult.suggestedTitle);
-      }
-
-      // Persist summary data to Firestore
-      await persistToFirestore({
-        title: title.trim() || summaryResult.suggestedTitle || "Untitled Reflection",
-        summary: summaryResult.summary || "",
-        insights: summaryResult.insights || [],
-        tags: summaryResult.tags || [],
-        mood: summaryResult.mood || "",
-        modelUsed: summaryResult.modelUsed || "gemini-3.6-flash",
-      });
+      await runMultiAgentAnalysis(activeId, content);
     } catch (err: any) {
-      console.error("Summarization error:", err);
-      setErrorMessage(err.message || "Failed to generate AI summary with Gemini.");
+      console.error("Synthesize error:", err);
+      setErrorMessage(err.message || "Failed to generate reflection synthesis.");
     } finally {
       setIsAiSummarizing(false);
     }
@@ -345,12 +412,16 @@ export default function App() {
             </div>
           )}
 
-          {/* AI Summary Card if present */}
-          {summaryData && (
+          {/* AI Summary & Multi-Agent Reflection Card if present or analyzing */}
+          {(summaryData || agentLoadingState) && (
             <SummaryCard
               summary={summaryData}
+              agentLoadingState={agentLoadingState}
               onApplyTitle={(suggested) => setTitle(suggested)}
-              onClose={() => setSummaryData(null)}
+              onClose={() => {
+                setSummaryData(null);
+                setAgentLoadingState(null);
+              }}
             />
           )}
 
