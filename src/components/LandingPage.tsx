@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Lock, Sparkles, BookOpen, ShieldCheck, ArrowRight, BrainCircuit, CheckCircle2, AlertCircle } from "lucide-react";
+import { Lock, Sparkles, BookOpen, ShieldCheck, ArrowRight, Brain, AlertCircle } from "lucide-react";
 import { signInWithGoogle } from "../firebase";
 
 interface LandingPageProps {
@@ -74,7 +74,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onAuthSuccess }) => {
             </div>
             <button
               onClick={() => setAuthError(null)}
-              className="text-xs text-red-600 hover:text-red-800 font-medium px-2 py-1 rounded"
+              className="text-xs text-red-600 hover:text-red-800 font-medium px-2 py-1 rounded cursor-pointer"
             >
               Dismiss
             </button>
@@ -87,12 +87,16 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onAuthSuccess }) => {
             Personal Reflection & Multi-Turn Brainstorming
           </div>
 
-          <h1 className="text-4xl sm:text-5xl font-serif tracking-tight text-stone-900 leading-tight mb-6">
-            A private space for your thoughts, clarified by Gemini.
+          <h1 className="text-4xl sm:text-5xl font-serif tracking-tight text-stone-900 leading-tight mb-4">
+            Four minds on every reflection.
           </h1>
 
-          <p className="text-lg text-stone-600 leading-relaxed mb-10 max-w-2xl mx-auto">
-            Write unhurried daily reflections, explore complex decisions with multi-turn AI dialogue, and distill structured takeaways. Every entry is isolated and encrypted in your personal Firestore account.
+          <p className="text-xl sm:text-2xl font-medium text-stone-700 tracking-tight mb-6">
+            A private journaling space where a team of specialist Gemini agents reflects with you.
+          </p>
+
+          <p className="text-base sm:text-lg text-stone-600 leading-relaxed mb-10 max-w-2xl mx-auto">
+            Write a reflection and a Reflection, Sentiment, Pattern, and Coach agent each weigh in — summarizing, sensing your mood, surfacing recurring themes from your own past entries, and leaving you one question to sit with. Every entry stays isolated to your own account.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -139,11 +143,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onAuthSuccess }) => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
           <div className="p-6 rounded-2xl bg-white border border-stone-200/80 shadow-sm">
             <div className="w-10 h-10 rounded-lg bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-700 mb-4">
-              <BrainCircuit className="w-5 h-5" />
+              <Brain className="w-5 h-5" />
             </div>
-            <h3 className="font-semibold text-stone-900 text-base mb-2">Gemini 3.6 Flash Engine</h3>
+            <h3 className="font-semibold text-stone-900 text-base mb-2">Multi-Agent Reflection Brain</h3>
             <p className="text-stone-600 text-sm leading-relaxed">
-              Multi-turn reflection partner and brainstorming guide with resilient automated model fallback ladders for uninterrupted introspection.
+              Four specialist agents — Reflection, Sentiment, Pattern, and Coach — analyze each entry server-side, never in your browser.
             </p>
           </div>
 
@@ -153,7 +157,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onAuthSuccess }) => {
             </div>
             <h3 className="font-semibold text-stone-900 text-base mb-2">Strict Firestore Isolation</h3>
             <p className="text-stone-600 text-sm leading-relaxed">
-              Each user’s reflections reside in dedicated user-bound collections protected by verified Firebase security rules. No cross-tenant access.
+              Every reflection lives under your own uid path, enforced by security rules. The Pattern agent can only ever read your history — never another user's.
             </p>
           </div>
 
@@ -161,9 +165,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onAuthSuccess }) => {
             <div className="w-10 h-10 rounded-lg bg-sky-50 border border-sky-100 flex items-center justify-center text-sky-700 mb-4">
               <Lock className="w-5 h-5" />
             </div>
-            <h3 className="font-semibold text-stone-900 text-base mb-2">Zero-Password Authentication</h3>
+            <h3 className="font-semibold text-stone-900 text-base mb-2">Zero-Password, Verified Auth</h3>
             <p className="text-stone-600 text-sm leading-relaxed">
-              Federated Google Identity means no stored passwords or leaked credentials. JWT verification protects every server request.
+              Federated Google Sign-In means no passwords. Every server request is cryptographically verified with the Firebase Admin SDK before any data is touched.
             </p>
           </div>
         </div>
