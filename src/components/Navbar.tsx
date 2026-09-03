@@ -1,8 +1,14 @@
 import React from "react";
-import { LogOut, Plus, ShieldCheck, User as UserIcon, Send } from "lucide-react";
+import { LogOut, Plus, ShieldCheck, User as UserIcon } from "lucide-react";
 import { AppUser } from "../types";
 import { logOut } from "../firebase";
 import { LogoMark } from "./LogoMark";
+
+const TelegramIcon = ({ className }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
+    <path d="M23.91 3.79L20.3 20.84c-.25 1.21-.98 1.5-2 .94l-5.5-4.07-2.66 2.57c-.3.3-.55.56-1.1.56-.72 0-.6-.27-.84-.95L6.3 13.7l-5.45-1.7c-1.18-.35-1.19-1.16.26-1.75l21.26-8.2c.97-.43 1.9.24 1.53 1.73z"/>
+  </svg>
+);
 
 interface NavbarProps {
   user: AppUser;
@@ -47,7 +53,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               className="hidden sm:inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full bg-sky-50 text-sky-700 border border-sky-200/80 hover:bg-sky-100 transition cursor-pointer"
               title="Telegram notifications active (click to manage)"
             >
-              <span className="w-1.5 h-1.5 rounded-full bg-sky-500" />
+              <TelegramIcon className="w-3.5 h-3.5" />
               <span>Telegram: connected</span>
             </button>
           ) : (
@@ -58,7 +64,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               className="hidden md:inline-flex items-center gap-1 text-xs text-stone-500 hover:text-stone-800 px-2 py-1 rounded-md hover:bg-stone-100 transition cursor-pointer"
               title="Configure Telegram notifications"
             >
-              <Send className="w-3.5 h-3.5 text-stone-400" />
+              <TelegramIcon className="w-3.5 h-3.5" />
               <span>Telegram</span>
             </button>
           )}

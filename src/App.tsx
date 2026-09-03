@@ -18,6 +18,7 @@ import {
 import {
   callGeminiChat,
   callMultiAgentReflect,
+  getTelegramSettings,
 } from "./lib/geminiApi";
 
 export default function App() {
@@ -86,6 +87,30 @@ export default function App() {
     );
 
     return () => unsubscribe();
+  }, [currentUser?.uid]);
+
+  // One-time Telegram status fetch on mount (after auth) to preserve connected indicator
+  useEffect(() => {
+    if (!currentUser?.uid) {
+      setIsTelegramConnected(false);
+      return;
+    }
+
+    let isMounted = true;
+    (async () => {
+      try {
+        const res = await getTelegramSettings();
+        if (isMounted && res && typeof res.connected === "boolean") {
+          setIsTelegramConnected(res.connected);
+        }
+      } catch {
+        // Silently ignore errors on mount
+      }
+    })();
+
+    return () => {
+      isMounted = false;
+    };
   }, [currentUser?.uid]);
 
   // Handler to start a brand new reflection
@@ -395,7 +420,6 @@ export default function App() {
           onSelectEntry={handleSelectEntry}
           onDeleteEntry={handleDeleteEntry}
           isLoading={listLoading}
-          onTelegramStatusChange={(connected) => setIsTelegramConnected(connected)}
         />
 
         {/* Main Stage: Active Journal Atelier */}
