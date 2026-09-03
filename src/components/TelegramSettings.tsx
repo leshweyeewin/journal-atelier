@@ -257,31 +257,30 @@ export const TelegramSettings: React.FC<TelegramSettingsProps> = ({
     </div>
   );
 
-  // If used as modal
-  if (isOpenModal) {
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-950/40 backdrop-blur-xs animate-in fade-in duration-150">
-        <div className="bg-white rounded-xl border border-stone-200 shadow-xl max-w-md w-full p-5 relative">
-          <button
-            id="close-telegram-modal-btn"
-            onClick={onCloseModal}
-            className="absolute top-4 right-4 p-1 text-stone-400 hover:text-stone-700 rounded-md transition cursor-pointer"
-            aria-label="Close modal"
-          >
-            <X className="w-4 h-4" />
-          </button>
-          <div className="pr-6 mb-2">
-            <h2 className="text-sm font-semibold text-stone-900">Telegram Notifications</h2>
-            <p className="text-xs text-stone-500">
-              Receive outbound reflection digests directly on Telegram.
-            </p>
-          </div>
-          <div className="pt-2">{contentNode}</div>
-        </div>
-      </div>
-    );
+  // Modal render (Telegram settings only appears as modal from navbar)
+  if (isOpenModal === false) {
+    return null;
   }
 
-  // Inline render (e.g. in HistorySidebar)
-  return <div className="p-3 border-t border-stone-200 bg-white/90">{contentNode}</div>;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-950/40 backdrop-blur-xs animate-in fade-in duration-150">
+      <div className="bg-white rounded-xl border border-stone-200 shadow-xl max-w-md w-full p-5 relative">
+        <button
+          id="close-telegram-modal-btn"
+          onClick={onCloseModal}
+          className="absolute top-4 right-4 p-1 text-stone-400 hover:text-stone-700 rounded-md transition cursor-pointer"
+          aria-label="Close modal"
+        >
+          <X className="w-4 h-4" />
+        </button>
+        <div className="pr-6 mb-2">
+          <h2 className="text-sm font-semibold text-stone-900">Telegram Notifications</h2>
+          <p className="text-xs text-stone-500">
+            Receive outbound reflection digests directly on Telegram.
+          </p>
+        </div>
+        <div className="pt-2">{contentNode}</div>
+      </div>
+    </div>
+  );
 };
