@@ -18,11 +18,18 @@ interface JournalEditorProps {
   lastSavedAt: number | null;
 }
 
-const PROMPT_STARTERS = [
+const REFLECT_STARTERS = [
   "What was the most significant challenge or victory today, and what did it teach me?",
   "A decision I am currently weighing and the underlying trade-offs I feel:",
-  "What is one creative idea or project I feel curious to explore next?",
   "A belief or reaction I had recently that I want to question and unpack:",
+  "What is draining or energizing me right now, and why?",
+];
+
+const BRAINSTORM_STARTERS = [
+  "A problem I keep running into that I'd love a fresh solution for:",
+  "A wild 'what if' idea I want to push further:",
+  "Something I want to build, create, or experiment with next:",
+  "A goal I have — help me break it into concrete first steps:",
 ];
 
 export const JournalEditor: React.FC<JournalEditorProps> = ({
@@ -51,6 +58,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
   };
 
   const activeMode = mode === "brainstorm" ? "brainstorm" : "reflect";
+  const starters = activeMode === "brainstorm" ? BRAINSTORM_STARTERS : REFLECT_STARTERS;
 
   return (
     <div id="journal-editor-container" className="flex flex-col bg-white rounded-2xl border border-stone-200 shadow-2xs p-5 mb-6">
@@ -111,7 +119,9 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
           id="journal-content-textarea"
           value={content}
           onChange={(e) => setContent(e.target.value)}
-          placeholder="Begin writing your reflection, notes, or thoughts here... Pour out whatever is on your mind."
+          placeholder={activeMode === "brainstorm"
+            ? "Drop a problem, goal, or half-formed idea here… let's explore angles and next steps."
+            : "Begin writing your reflection, notes, or thoughts here… pour out whatever is on your mind."}
           rows={7}
           className="w-full text-stone-800 text-sm leading-relaxed p-4 rounded-xl bg-stone-50/40 border border-stone-200 placeholder-stone-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-stone-900/10 focus:border-stone-400 transition resize-y font-sans"
         />
@@ -128,10 +138,10 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
         <div className="mb-4">
           <div className="flex items-center gap-1.5 text-stone-500 text-xs font-medium mb-2">
             <Lightbulb className="w-3.5 h-3.5 text-amber-500" />
-            <span>Need a spark? Try a reflection starter:</span>
+            <span>{activeMode === "brainstorm" ? "Need a spark? Try a brainstorm starter:" : "Need a spark? Try a reflection starter:"}</span>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {PROMPT_STARTERS.map((prompt, idx) => (
+            {starters.map((prompt, idx) => (
               <button
                 key={idx}
                 type="button"
