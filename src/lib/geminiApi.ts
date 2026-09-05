@@ -126,6 +126,48 @@ export async function callMultiAgentReflect(
   return await response.json();
 }
 
+export interface IdeateResponse {
+  id: string;
+  title?: string;
+  idea?: string;
+  oneLiner?: string;
+  capabilities?: { name: string; why: string; docUrl: string | null }[];
+  stack?: string[];
+  uiComponents?: string[];
+  infra?: string[];
+  dataFlow?: string;
+  milestones?: string[];
+  risks?: string[];
+  firstStep?: string;
+  modelUsed?: string;
+}
+
+export async function ideate(seed: string): Promise<IdeateResponse> {
+  const token = await getIdToken();
+  if (!token) {
+    throw new Error("Authentication session expired. Please sign in again.");
+  }
+  const response = await fetch("/api/ideate", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ seed }),
+  });
+  if (!response.ok) {
+    let errorMsg = "Failed to generate project idea.";
+    try {
+      const j = await response.json();
+      if (j.error) errorMsg = j.error;
+    } catch {
+      errorMsg = `Server returned error status ${response.status}`;
+    }
+    throw new Error(errorMsg);
+  }
+  return await response.json();
+}
+
 export interface TelegramSettingsResponse {
   telegramChatId: string | null;
   connected: boolean;

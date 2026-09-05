@@ -1,5 +1,5 @@
 import React from "react";
-import { LogOut, Plus, ShieldCheck, User as UserIcon } from "lucide-react";
+import { LogOut, Plus, ShieldCheck, Sparkles, User as UserIcon } from "lucide-react";
 import { AppUser } from "../types";
 import { logOut } from "../firebase";
 import { LogoMark } from "./LogoMark";
@@ -16,6 +16,8 @@ interface NavbarProps {
   isSaving?: boolean;
   isTelegramConnected?: boolean;
   onOpenTelegramSettings?: () => void;
+  view?: "journal" | "studio";
+  onNavigate?: (view: "journal" | "studio") => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -24,22 +26,57 @@ export const Navbar: React.FC<NavbarProps> = ({
   isSaving,
   isTelegramConnected,
   onOpenTelegramSettings,
+  view = "journal",
+  onNavigate,
 }) => {
   return (
     <header className="w-full bg-white border-b border-stone-200 sticky top-0 z-30 shadow-xs">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-        {/* Left branding */}
-        <div className="flex items-center gap-3">
-          <LogoMark size={32} />
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-stone-900 text-base tracking-tight">Journal Atelier</span>
-              <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                <ShieldCheck className="w-3 h-3" />
-                Isolated Firestore
-              </span>
+        {/* Left branding and Navigation Toggle */}
+        <div className="flex items-center gap-3 sm:gap-5">
+          <div className="flex items-center gap-3">
+            <LogoMark size={32} />
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-stone-900 text-base tracking-tight">Journal Atelier</span>
+                <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  <ShieldCheck className="w-3 h-3" />
+                  Isolated Firestore
+                </span>
+              </div>
             </div>
           </div>
+
+          {/* View Toggle Segmented Control */}
+          {onNavigate && (
+            <div className="flex items-center p-0.5 sm:p-1 rounded-xl bg-stone-100 border border-stone-200/80">
+              <button
+                id="nav-journal-btn"
+                type="button"
+                onClick={() => onNavigate("journal")}
+                className={`px-2.5 sm:px-3 py-1 text-xs rounded-lg transition cursor-pointer ${
+                  view === "journal"
+                    ? "bg-white text-stone-900 shadow-2xs font-semibold"
+                    : "text-stone-600 hover:text-stone-900 font-medium"
+                }`}
+              >
+                Journal
+              </button>
+              <button
+                id="nav-studio-btn"
+                type="button"
+                onClick={() => onNavigate("studio")}
+                className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 text-xs rounded-lg transition cursor-pointer ${
+                  view === "studio"
+                    ? "bg-white text-amber-900 shadow-2xs font-semibold"
+                    : "text-stone-600 hover:text-stone-900 font-medium"
+                }`}
+              >
+                <Sparkles className={`w-3.5 h-3.5 ${view === "studio" ? "text-amber-600" : "text-stone-500"}`} />
+                <span>Project Studio</span>
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Center / Action */}
