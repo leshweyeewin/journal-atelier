@@ -61,6 +61,7 @@ export default function App() {
   const [isTelegramModalOpen, setIsTelegramModalOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [view, setView] = useState<"journal" | "studio" | "dashboard">("journal");
+  const [landingResolved, setLandingResolved] = useState(false);
   const [studioToast, setStudioToast] = useState<string | null>(null);
   const [studioIdea, setStudioIdea] = useState<ProjectIdea | null>(null);
   const isFirstMountRef = useRef(true);
@@ -107,6 +108,7 @@ export default function App() {
         setSecurity(null);
         setUnlockedEntryId(null);
         hasAutoLandedRef.current = false;
+        setLandingResolved(false);
       }
       setAuthLoading(false);
     });
@@ -117,6 +119,7 @@ export default function App() {
   // Reset auto-landing flag if currentUser uid changes
   useEffect(() => {
     hasAutoLandedRef.current = false;
+    setLandingResolved(false);
   }, [currentUser?.uid]);
 
   // Listen to User's Isolated Firestore Interactions Subcollection
@@ -136,6 +139,7 @@ export default function App() {
         // If zero entries, keep view "journal" (the composer) so new users land on "start writing".
         if (!hasAutoLandedRef.current) {
           hasAutoLandedRef.current = true;
+          setLandingResolved(true);
           if (validEntries.length > 0) {
             setView("dashboard");
           } else {
@@ -146,6 +150,7 @@ export default function App() {
       },
       (err) => {
         console.error("Firestore subscription error:", err);
+        setLandingResolved(true);
         setErrorMessage("Failed to synchronize reflections with Firestore. Check your connection.");
         setListLoading(false);
       }
@@ -749,6 +754,17 @@ export default function App() {
   // Unauthenticated: Show Landing Page
   if (!currentUser) {
     return <LandingPage onAuthSuccess={() => {}} />;
+  }
+
+  // Hold a splash until the first Firestore snapshot picks the landing view,
+  // so the Journal composer never flashes before auto-landing to Trends.
+  if (!landingResolved) {
+    return (
+      <div className="min-h-screen bg-stone-50 flex flex-col items-center justify-center p-6 text-stone-600">
+        <div className="w-8 h-8 border-2 border-stone-300 border-t-stone-800 rounded-full animate-spin mb-4" />
+        <p className="text-sm font-medium">Loading your journal…</p>
+      </div>
+    );
   }
 
   return (
