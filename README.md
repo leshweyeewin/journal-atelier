@@ -51,7 +51,8 @@ a strict, verifiable security posture.
 
 - **Server-side keys only** — the browser holds a Firebase ID token; the Gemini key lives
   in Secret Manager on Cloud Run and is never shipped to the client.
-- **Verified identity at every boundary** — Firebase Admin `verifyIdToken` on each API call.
+- **Verified identity at every boundary** — Firebase Admin `verifyIdToken` on each API call,
+  with optional **Firebase App Check (reCAPTCHA v3)** attesting requests come from the real app.
 - **Owner-bound data isolation** — Firestore rules enforce `request.auth.uid == userId`.
 - **Untrusted model I/O** — user seeds and entries are wrapped as data, never instructions
   (OWASP LLM01); reference links come only from a server-side allowlist, and AI markdown is
@@ -97,9 +98,9 @@ Full setup, Secret Manager, Firestore rules, and Cloud Run deployment:
 | Doc | Contents |
 | :--- | :--- |
 | **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** | Security highlights, system architecture, and data-flow diagrams. |
-| **[docs/SECURITY_WALKTHROUGH.md](docs/SECURITY_WALKTHROUGH.md)** | Prompt-injection & XSS verification scenarios (PI-1 … PI-7) with expected safe outcomes. |
+| **[SECURITY_WALKTHROUGH.md](SECURITY_WALKTHROUGH.md)** | Agentic threat model (5 zones), prompt-injection & XSS verification scenarios (PI-1 … PI-7), and PIN-lock verification (L-1 … L-8). |
 | **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** | Prerequisites, Secret Manager, Firestore rules, local dev, Cloud Run deploy, campaign labeling, Telegram setup. |
-| **[docs/TESTING.md](docs/TESTING.md)** | Full walkthrough test matrix (TC-01 … TC-48) covering every user interaction and security control. |
+| **[docs/TESTING.md](docs/TESTING.md)** | Full walkthrough test matrix (TC-01 … TC-49) covering every user interaction and security control. |
 
 ---
 

@@ -5,7 +5,7 @@
 
 This document details the security posture and system design of Journal Atelier.
 For the adversarial prompt-injection & XSS verification scenarios see
-[SECURITY_WALKTHROUGH.md](./SECURITY_WALKTHROUGH.md); for setup and deployment see
+[SECURITY_WALKTHROUGH.md](../SECURITY_WALKTHROUGH.md); for setup and deployment see
 [DEPLOYMENT.md](./DEPLOYMENT.md); for the full walkthrough test matrix see
 [TESTING.md](./TESTING.md).
 
@@ -126,8 +126,8 @@ runtime. No key ever reaches client code, committed config, or the repository.
 ### 9. Output sanitization & XSS defense (OWASP A03 / LLM05)
 - Model output is treated as untrusted before it reaches the DOM. AI replies render through
   `react-markdown` in `ChatStream.tsx` with `disallowedElements` stripping `script`,
-  `iframe`, `object`, `embed`, `style`, `form`, and `input`, and a `urlTransform` that blanks
-  any `javascript:`, `data:`, or `vbscript:` URL.
+  `iframe`, `object`, `embed`, `style`, `form`, `input`, `img`, and `svg`, and a `urlTransform`
+  that blanks any `javascript:`, `data:`, or `vbscript:` URL.
 - No component uses `dangerouslySetInnerHTML`; capability/reference links are additionally
   gated to `https://` and rendered with `rel="noopener noreferrer"`. A malicious or
   hallucinated payload therefore cannot execute script or inject an active element.
@@ -140,6 +140,21 @@ runtime. No key ever reaches client code, committed config, or the repository.
   browser from the entries already loaded for that user; the dashboard adds **no new endpoint
   and reads no additional data**. Locked entries stay masked in every chart tooltip and card
   while the session is locked.
+
+### 11. Client integrity & resilient transport
+- **Firebase App Check (reCAPTCHA v3).** When a `recaptchaSiteKey` is configured, the client
+  initializes App Check so Firebase back-end services (Auth, Firestore) can attest that
+  requests originate from the genuine app rather than a scripted or spoofed client — an
+  anti-abuse layer on top of the per-request `verifyIdToken` check. It is a **no-op when the
+  key is blank** (e.g. local dev), and `localhost` uses the standard App Check debug token, so
+  the control never blocks development. The site key is public by design; no secret is exposed.
+- **Resilient Firestore transport.** Firestore is initialized with
+  `experimentalForceLongPolling`, which keeps reads and writes reliable behind the iframe and
+  proxy environments the prototype runs in (where streaming WebChannel connections are often
+  dropped). Initialization is wrapped so a re-init safely returns the existing instance.
+- **Standardized persistence errors.** Firestore reads/writes surface through a single error
+  path that escalates a clear banner to the user (with retry) instead of failing silently,
+  and never clears the user's unsaved input until a write is confirmed.
 
 ---
 
