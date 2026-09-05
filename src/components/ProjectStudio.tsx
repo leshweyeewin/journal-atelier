@@ -137,7 +137,7 @@ export const ProjectStudio: React.FC<ProjectStudioProps> = ({
     }
     try {
       const data = await ideate(inputSeed);
-      setResult(data);
+      setResult({ ...data, stage: data.stage || "Idea" });
       setEditTitle(data.title || "");
       setEditOneLiner(data.oneLiner || "");
       setEditFirstStep(data.firstStep || "");
@@ -184,6 +184,16 @@ export const ProjectStudio: React.FC<ProjectStudioProps> = ({
       setTimeout(() => setSaveStatus("idle"), 2500);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleQuickStageChange = async (newStage: string) => {
+    if (!activeIdea) return;
+    setResult((prev) => (prev ? { ...prev, stage: newStage } : prev));
+    setEditStage(newStage);
+    const id = activeIdea.id || initialIdea?.id;
+    if (id && onUpdateIdea) {
+      try { await onUpdateIdea(id, { stage: newStage }); } catch (e) { /* non-blocking */ }
     }
   };
 
@@ -817,20 +827,23 @@ export const ProjectStudio: React.FC<ProjectStudioProps> = ({
                 </p>
               )}
 
-              {(activeIdea.stage || (activeIdea.tags && activeIdea.tags.length > 0)) && (
-                <div className="flex flex-wrap items-center gap-2 pt-1">
-                  {activeIdea.stage && (
-                    <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${STAGE_STYLES[activeIdea.stage] || STAGE_STYLES.Idea}`}>
-                      {activeIdea.stage}
-                    </span>
-                  )}
-                  {activeIdea.tags?.map((t, i) => (
-                    <span key={i} className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-stone-100 text-stone-600 border border-stone-200">
-                      #{t}
-                    </span>
-                  ))}
-                </div>
-              )}
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <label htmlFor="studio-quick-stage" className="sr-only">Completion stage</label>
+                <select
+                  id="studio-quick-stage"
+                  value={activeIdea.stage || "Idea"}
+                  onChange={(e) => handleQuickStageChange(e.target.value)}
+                  title="Set completion stage"
+                  className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border cursor-pointer focus:outline-none focus:ring-2 focus:ring-amber-200 ${STAGE_STYLES[activeIdea.stage || "Idea"] || STAGE_STYLES.Idea}`}
+                >
+                  {PROJECT_STAGES.map((s) => (<option key={s} value={s}>{s}</option>))}
+                </select>
+                {activeIdea.tags?.map((t, i) => (
+                  <span key={i} className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-stone-100 text-stone-600 border border-stone-200">
+                    #{t}
+                  </span>
+                ))}
+              </div>
             </div>
           )}
 

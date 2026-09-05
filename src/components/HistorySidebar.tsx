@@ -79,23 +79,22 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
     return (
       <aside
         id="history-sidebar-collapsed"
-        className="w-full md:w-14 shrink-0 bg-stone-50/70 border-r border-stone-200 flex md:flex-col items-center justify-between md:justify-start py-3 px-3 md:px-0 h-auto md:h-[calc(100vh-4rem)] gap-3 transition-all duration-200"
+        onClick={onToggleCollapse}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onToggleCollapse?.(); } }}
+        title={isProjects ? "Expand saved projects sidebar" : "Expand reflections sidebar"}
+        aria-label="Expand sidebar"
+        className="w-full md:w-14 shrink-0 bg-stone-50/70 border-r border-stone-200 flex md:flex-col items-center justify-between md:justify-start py-3 px-3 md:px-0 h-auto md:h-[calc(100vh-4rem)] gap-3 transition-all duration-200 cursor-pointer hover:bg-stone-100/70"
       >
-        <button
-          id="sidebar-expand-btn"
-          type="button"
-          onClick={onToggleCollapse}
-          title={isProjects ? "Expand saved projects sidebar" : "Expand reflections sidebar"}
-          className="p-2 rounded-lg text-stone-600 hover:text-stone-900 hover:bg-stone-200/60 active:scale-95 transition cursor-pointer flex items-center md:flex-col gap-1.5"
-          aria-label="Expand sidebar"
-        >
+        <div className="p-2 rounded-lg text-stone-600 flex items-center md:flex-col gap-1.5">
           {isProjects ? (
             <Sparkles className="w-4 h-4 text-amber-700" />
           ) : (
             <BookMarked className="w-4 h-4 text-stone-700" />
           )}
           <ChevronRight className="w-3.5 h-3.5 text-stone-400" />
-        </button>
+        </div>
 
         <span className="text-[10px] font-medium text-stone-400 md:[writing-mode:vertical-lr] tracking-wider uppercase select-none">
           {isProjects ? "Projects" : "Reflections"} ({safeEntries.length})
