@@ -170,7 +170,7 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
                   {isModel ? (
                     <div className="prose prose-stone prose-xs max-w-none prose-p:my-1 prose-headings:my-1.5 prose-ul:my-1">
                       <Markdown
-                        disallowedElements={["script", "iframe", "object", "embed", "style", "form", "input"]}
+                        disallowedElements={["script", "iframe", "object", "embed", "style", "form", "input", "img", "svg"]}
                         urlTransform={(url: string) => {
                           const clean = (url || "").trim().toLowerCase();
                           if (
