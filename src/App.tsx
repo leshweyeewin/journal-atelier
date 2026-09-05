@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "./firebase";
-import { AppUser, ChatMessage, JournalInteraction, ReflectionMode, SummaryResult } from "./types";
+import { AppUser, ChatMessage, JournalInteraction, ReflectionMode, SummaryResult, SecuritySettings } from "./types";
 import { Navbar } from "./components/Navbar";
 import { LandingPage } from "./components/LandingPage";
 import { HistorySidebar } from "./components/HistorySidebar";
@@ -11,11 +11,16 @@ import { SummaryCard, AgentLoadingState } from "./components/SummaryCard";
 import { ErrorBanner } from "./components/ErrorBanner";
 import { TelegramSettings } from "./components/TelegramSettings";
 import { ProjectStudio } from "./components/ProjectStudio";
+import { PinModal } from "./components/PinModal";
 import {
   saveInteraction,
   subscribeUserInteractions,
   deleteInteraction,
+  getSecuritySettings,
+  setSecuritySettings,
+  setInteractionLocked,
 } from "./lib/firestoreService";
+import { generateSalt, hashPin, safeEqual, PIN_ITERATIONS } from "./lib/pinLock";
 import {
   callGeminiChat,
   callMultiAgentReflect,
@@ -51,6 +56,13 @@ export default function App() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [view, setView] = useState<"journal" | "studio">("journal");
 
+  // PIN & Security lock states
+  const [security, setSecurity] = useState<SecuritySettings | null>(null);
+  const [isUnlocked, setIsUnlocked] = useState(false);
+  const [pinModal, setPinModal] = useState<"set" | "enter" | null>(null);
+  const [pendingLockedEntry, setPendingLockedEntry] = useState<JournalInteraction | null>(null);
+  const hasPin = !!security;
+
   // Listen to Firebase Authentication state
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -61,9 +73,12 @@ export default function App() {
           displayName: user.displayName,
           photoURL: user.photoURL,
         });
+        getSecuritySettings(user.uid).then(setSecurity).catch(() => {});
       } else {
         setCurrentUser(null);
         setInteractions([]);
+        setSecurity(null);
+        setIsUnlocked(false);
       }
       setAuthLoading(false);
     });
@@ -134,6 +149,12 @@ export default function App() {
 
   // Handler to select an existing reflection from history
   const handleSelectEntry = useCallback((entry: JournalInteraction) => {
+    if (entry.locked && !isUnlocked) {
+      setPendingLockedEntry(entry);
+      setPinModal("enter");
+      return;
+    }
+
     setView("journal");
     setActiveId(entry.id);
     setTitle(entry.title || "");
@@ -169,7 +190,42 @@ export default function App() {
     setLastSavedAt(!isNaN(parsedTime as number) ? parsedTime : null);
     setErrorMessage(null);
     setFailedSavePayload(null);
-  }, []);
+  }, [isUnlocked]);
+
+  // PIN security handlers
+  const handleSetPin = async (pin: string) => {
+    if (!currentUser) return "Not signed in";
+    const salt = generateSalt();
+    const hash = await hashPin(pin, salt);
+    const s = { salt, hash, iterations: PIN_ITERATIONS, updatedAt: Date.now() };
+    await setSecuritySettings(currentUser.uid, s);
+    setSecurity(s);
+    setIsUnlocked(true);
+    setPinModal(null);
+    return null;
+  };
+
+  const handleEnterPin = async (pin: string) => {
+    if (!security) return "No PIN set";
+    const hash = await hashPin(pin, security.salt, security.iterations);
+    if (!safeEqual(hash, security.hash)) return "Incorrect PIN";
+    setIsUnlocked(true);
+    setPinModal(null);
+    if (pendingLockedEntry) {
+      handleSelectEntry(pendingLockedEntry);
+      setPendingLockedEntry(null);
+    }
+    return null;
+  };
+
+  const handleToggleLock = async (entry: JournalInteraction) => {
+    if (!currentUser) return;
+    if (!entry.locked && !hasPin) {
+      setPinModal("set");
+      return;
+    }
+    await setInteractionLocked(currentUser.uid, entry.id, !entry.locked);
+  };
 
   // Handler to delete a reflection
   const handleDeleteEntry = async (id: string, e: React.MouseEvent) => {
@@ -429,6 +485,9 @@ export default function App() {
           isLoading={listLoading}
           isCollapsed={isSidebarCollapsed}
           onToggleCollapse={() => setIsSidebarCollapsed((prev) => !prev)}
+          isUnlocked={isUnlocked}
+          onToggleLock={handleToggleLock}
+          onRequestUnlock={() => setPinModal("enter")}
         />
 
         {/* Main Stage: Active Journal Atelier or Project Studio */}
@@ -505,6 +564,18 @@ export default function App() {
           isOpenModal={true}
           onCloseModal={() => setIsTelegramModalOpen(false)}
           onStatusChange={(connected) => setIsTelegramConnected(connected)}
+        />
+      )}
+
+      {/* PIN Security Modal */}
+      {pinModal && (
+        <PinModal
+          mode={pinModal}
+          onSubmit={pinModal === "set" ? handleSetPin : handleEnterPin}
+          onCancel={() => {
+            setPinModal(null);
+            setPendingLockedEntry(null);
+          }}
         />
       )}
     </div>
