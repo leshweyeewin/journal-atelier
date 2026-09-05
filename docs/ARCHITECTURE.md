@@ -60,18 +60,23 @@ runtime. No key ever reaches client code, committed config, or the repository.
   agent's failure degrades gracefully without failing the run.
 
 ### 6. Outbound-only Telegram notifications
-- Optional real-time push notifications to the user's Telegram chat, across three triggers:
-  reflection synthesis, a saved project idea (`/api/notify/project-saved`), and an on-demand
-  weekly digest (`/api/notify/weekly-digest`).
+- Optional real-time push notifications to the user's Telegram chat, across four triggers:
+  reflection synthesis, a saved project idea (`/api/notify/project-saved`), a newly saved
+  journal entry (`/api/notify/entry-saved`, title only, once per new unlocked entry), and an
+  on-demand weekly digest (`/api/notify/weekly-digest`).
 - **Outbound-only & closed-loop**: no inbound webhooks, bot commands, or polling.
 - Destination host is strictly hardcoded to
   `https://api.telegram.org/bot<token>/sendMessage` (SSRF prevention).
 - **Minimal, summary-only payloads.** Reflection pushes send only the suggested title,
   sentiment tag, and Coach question. Project-saved sends only title, one-liner, and first
   step. The weekly digest sends only aggregate metadata for the last 7 days — entry count,
-  mood tally, top themes, and up to 5 titles. **No raw journal text, conversation messages,
-  reflection bodies, or locked-entry content is ever transmitted.** Every field passes
-  through `sanitizeTelegramField` (escaped, length-capped).
+  mood tally, top themes, up to 5 titles, and the week's date range (e.g. *30 Aug to 5 Sep
+  2026*) in its header. **No raw journal text, conversation messages, reflection bodies, or
+  locked-entry content is ever transmitted.** Every field passes through
+  `sanitizeTelegramField` (escaped, length-capped).
+- The digest query reads the user's interactions **without** an `orderBy("createdAt")` clause
+  and sorts in memory, so entries written before the `createdAt` field existed are still
+  counted (the Admin `orderBy` would otherwise silently drop documents missing that field).
 - The digest reads the user's own history bound to the token-derived `uid` only, and the
   whole path is best-effort: every notification is wrapped in try/catch and returns success
   even when Telegram is unconfigured, so it can never block or fail a reflection.

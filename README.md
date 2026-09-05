@@ -8,6 +8,7 @@ Built **security-first** on Firebase Authentication, Cloud Firestore, Google Clo
 and **Gemini 3.6 Flash** — with the API key held server-side at all times.
 
 🔗 **Live prototype:** https://journal-atelier.ai.studio/
+📖 **Story / blog post:** [docs/journal_atelier_blog_post.html](docs/journal_atelier_blog_post.html)
 
 > Built for the **Google Cloud GenAI Academy (APAC) — Cohort 3 · Ideathon Challenge**.
 > `#AccelerateAIwithCloudRun`
@@ -62,9 +63,10 @@ a strict, verifiable security posture.
 | ✍️ **Reflect & Brainstorm** | Write journal entries and talk them through with Gemini over multi-turn, context-preserving chat. |
 | 🧠 **Multi-agent Synthesize** | One click routes an entry through four specialist agents — Reflection, Sentiment, Pattern, Coach — for a title, mood, recurring themes drawn from *your own* history, and a coaching question. |
 | 📈 **Mood & Sentiment Trends** | A Trends dashboard charts your emotional valence over time and mood frequency (past-30-days / all-time), with click-to-filter drill-down — computed entirely in-browser from your own entries. |
-| 💡 **AI Project Studio** | Generate novel AI project concepts from a seed (or "Surprise Me"), **refine** them with Gemini, save them to history, and export a **provider-agnostic Markdown build spec** you can hand to Gemini, Claude, OpenAI, or a local Ollama model. |
+| 💡 **AI Project Studio** | Generate novel AI project concepts from a seed (or "Surprise Me"), **refine** them with Gemini, tag them and track a **completion stage** (Idea → Shipped), save them to history, and export a **provider-agnostic Markdown build spec** you can hand to Gemini, Claude, OpenAI, or a local Ollama model. |
+| 🗂️ **Context-aware sidebar** | One sidebar that shows your **reflections** in Journal and your **saved projects** in Studio, auto-collapsed by default and hidden entirely on Trends for a full-width dashboard. |
 | 🔒 **Personal PIN lock** | Screen-privacy layer for individual entries, backed by a browser-derived PBKDF2-SHA256 hash — honest about being privacy, not encryption. |
-| 📲 **Telegram alerts** | Optional outbound-only push on synthesis, saved ideas, and an on-demand weekly digest — summary metadata only, never the raw journal text. |
+| 📲 **Telegram alerts** | Optional outbound-only push on synthesis, saved ideas, new journal entries, and an on-demand weekly digest (with the week's date range) — summary metadata only, never the raw journal text. |
 
 ## Security posture (at a glance)
 
@@ -93,7 +95,7 @@ Full details: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 | AI engine | Gemini 3.6 Flash (`@google/genai`) | Generates replies and summarizes entries, with a resilient model fallback ladder. |
 | Secret management | Google Cloud Secret Manager | Stores the Gemini API key; retrieved server-side only. |
 | Runtime / deploy | Google Cloud Run | Server-side runtime; keys injected from Secret Manager. |
-| Frontend | React + Vite + TypeScript | Editor, chat, Project Studio, Trends dashboard, history sidebar. |
+| Frontend | React + Vite + TypeScript | Editor, chat, Project Studio, Trends dashboard, and a context-aware sidebar (reflections in Journal, saved projects in Studio). |
 | Charts | Recharts | Client-side mood/sentiment visualizations on the Trends dashboard. |
 
 ---
@@ -119,7 +121,8 @@ Full setup, Secret Manager, Firestore rules, and Cloud Run deployment:
 | **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** | Security highlights, system architecture, and data-flow diagrams. |
 | **[docs/SECURITY_WALKTHROUGH.md](docs/SECURITY_WALKTHROUGH.md)** | Agentic threat model (5 zones), prompt-injection & XSS verification scenarios (PI-1 … PI-7), and PIN-lock verification (L-1 … L-8). |
 | **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** | Prerequisites, Secret Manager, Firestore rules, local dev, Cloud Run deploy, campaign labeling, Telegram setup. |
-| **[docs/TESTING.md](docs/TESTING.md)** | Full walkthrough test matrix (TC-01 … TC-49) covering every user interaction and security control. |
+| **[docs/TESTING.md](docs/TESTING.md)** | Full walkthrough test matrix (TC-01 … TC-56) covering every user interaction and security control. |
+| **[docs/journal_atelier_blog_post.html](docs/journal_atelier_blog_post.html)** | The build story — inspiration, security-first design decisions, and what Journal Atelier does. |
 
 ---
 
