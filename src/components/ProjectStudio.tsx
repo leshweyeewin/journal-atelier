@@ -8,8 +8,14 @@ import {
   Rocket,
   ExternalLink,
   Loader2,
+  Download,
+  Copy,
+  Check,
+  Save,
 } from "lucide-react";
 import { ideate, IdeateResponse } from "../lib/geminiApi";
+import { ProjectIdea } from "../types";
+import { buildProjectSpecMarkdown, slugify, downloadTextFile, copyText } from "../lib/buildSpec";
 import { ErrorBanner } from "./ErrorBanner";
 
 const IDEATION_STAGES = [
@@ -19,13 +25,19 @@ const IDEATION_STAGES = [
   "Planning your first actionable steps…",
 ];
 
-export const ProjectStudio: React.FC = () => {
+interface ProjectStudioProps {
+  onSaveIdea?: (idea: ProjectIdea) => Promise<void> | void;
+}
+
+export const ProjectStudio: React.FC<ProjectStudioProps> = ({ onSaveIdea }) => {
   const [seed, setSeed] = useState("");
   const [loading, setLoading] = useState(false);
   const [stageIndex, setStageIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<IdeateResponse | null>(null);
   const [lastCallSeed, setLastCallSeed] = useState<string>("");
+  const [copied, setCopied] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   // Staged advancing status that mirrors the real agent order
   useEffect(() => {
@@ -51,6 +63,31 @@ export const ProjectStudio: React.FC = () => {
       setError(err?.message || "Failed to generate project idea.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDownloadSpec = () => {
+    if (!result) return;
+    const md = buildProjectSpecMarkdown(result);
+    downloadTextFile(`${slugify(result.title || "project")}-build-spec.md`, md);
+  };
+
+  const handleCopySpec = async () => {
+    if (!result) return;
+    const ok = await copyText(buildProjectSpecMarkdown(result));
+    if (ok) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!result || !onSaveIdea) return;
+    setSaving(true);
+    try {
+      await onSaveIdea(result);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -162,6 +199,50 @@ export const ProjectStudio: React.FC = () => {
       {/* Results Region - Graceful Degradation */}
       {result && !loading && (
         <div className="space-y-6 animate-fadeIn">
+          {/* Actions: save + portable build spec export */}
+          <div className="rounded-2xl border border-stone-200 bg-white p-4 sm:p-5 shadow-xs flex flex-wrap items-center gap-2.5">
+            <span className="text-xs font-semibold text-stone-600 mr-1">Do more with this idea:</span>
+
+            {onSaveIdea && (
+              <button
+                id="studio-save-idea-btn"
+                type="button"
+                onClick={handleSave}
+                disabled={saving}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-stone-900 text-stone-50 text-xs font-medium hover:bg-stone-800 active:scale-[0.98] transition disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
+              >
+                <Save className="w-3.5 h-3.5 text-amber-400" />
+                <span>{saving ? "Saving…" : "Save to history"}</span>
+              </button>
+            )}
+
+            <button
+              id="studio-download-spec-btn"
+              type="button"
+              onClick={handleDownloadSpec}
+              title="Download a provider-agnostic .md build spec"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-stone-300 bg-white text-stone-800 text-xs font-medium hover:bg-stone-50 active:scale-[0.98] transition cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5 text-stone-500" />
+              <span>Download .md</span>
+            </button>
+
+            <button
+              id="studio-copy-spec-btn"
+              type="button"
+              onClick={handleCopySpec}
+              title="Copy the build spec to clipboard"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-amber-300/80 bg-amber-50/70 text-amber-900 text-xs font-medium hover:bg-amber-100 active:scale-[0.98] transition cursor-pointer"
+            >
+              {copied ? <Check className="w-3.5 h-3.5 text-green-600" /> : <Copy className="w-3.5 h-3.5 text-amber-600" />}
+              <span>{copied ? "Copied" : "Copy spec"}</span>
+            </button>
+
+            <span className="w-full sm:w-auto sm:ml-auto text-[11px] text-stone-400">
+              Build it in Gemini, Claude, or a local model (Ollama).
+            </span>
+          </div>
+
           {/* Idea Card */}
           {hasIdeaCard && (
             <div

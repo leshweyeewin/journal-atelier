@@ -25,6 +25,21 @@ export interface SummaryResult {
   modelUsed?: string;
 }
 
+export interface ProjectIdea {
+  title?: string;
+  idea?: string;
+  oneLiner?: string;
+  capabilities?: { name: string; why: string; docUrl: string | null }[];
+  stack?: string[];
+  uiComponents?: string[];
+  infra?: string[];
+  dataFlow?: string;
+  milestones?: string[];
+  risks?: string[];
+  firstStep?: string;
+  modelUsed?: string;
+}
+
 export interface JournalInteraction {
   id: string;
   userId: string;
@@ -42,6 +57,7 @@ export interface JournalInteraction {
   coachPrompt?: string;
   modelUsed?: string;
   locked?: boolean;
+  projectIdea?: ProjectIdea;
   createdAt: number;
   updatedAt: number;
 }

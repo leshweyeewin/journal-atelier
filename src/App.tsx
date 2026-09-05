@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "./firebase";
-import { AppUser, ChatMessage, JournalInteraction, ReflectionMode, SummaryResult, SecuritySettings } from "./types";
+import { AppUser, ChatMessage, JournalInteraction, ReflectionMode, SummaryResult, SecuritySettings, ProjectIdea } from "./types";
 import { Navbar } from "./components/Navbar";
 import { LandingPage } from "./components/LandingPage";
 import { HistorySidebar } from "./components/HistorySidebar";
@@ -56,6 +56,14 @@ export default function App() {
   const [isTelegramModalOpen, setIsTelegramModalOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [view, setView] = useState<"journal" | "studio">("journal");
+  const [studioToast, setStudioToast] = useState<string | null>(null);
+
+  // Auto-dismiss studio toast
+  useEffect(() => {
+    if (!studioToast) return;
+    const t = setTimeout(() => setStudioToast(null), 3000);
+    return () => clearTimeout(t);
+  }, [studioToast]);
 
   // PIN & Security lock states
   const [security, setSecurity] = useState<SecuritySettings | null>(null);
@@ -249,6 +257,38 @@ export default function App() {
       setErrorMessage("Could not delete the reflection from Firestore.");
     }
   };
+
+  // Save a Project Idea to History
+  const handleSaveIdea = useCallback(
+    async (idea: ProjectIdea) => {
+      if (!currentUser) {
+        setStudioToast("Sign in to save ideas.");
+        return;
+      }
+      const id = `idea_${Date.now()}`;
+      const body = [
+        idea.oneLiner ? `_${idea.oneLiner}_` : "",
+        idea.idea || "",
+        idea.firstStep ? `**First step:** ${idea.firstStep}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n\n");
+      try {
+        await saveInteraction(currentUser.uid, {
+          id,
+          title: idea.title || "Project idea",
+          content: body,
+          mode: "brainstorm",
+          modelUsed: idea.modelUsed || "gemini-3.6-flash",
+          projectIdea: idea,
+        });
+        setStudioToast("Idea saved to your history.");
+      } catch {
+        setStudioToast("Could not save idea. Please try again.");
+      }
+    },
+    [currentUser]
+  );
 
   // Guaranteed Transactional Save to Firestore
   const persistToFirestore = async (override?: Partial<JournalInteraction>) => {
@@ -532,7 +572,7 @@ export default function App() {
         {/* Main Stage: Active Journal Atelier or Project Studio */}
         <main className="flex-1 p-4 sm:p-6 overflow-y-auto flex flex-col">
           {view === "studio" ? (
-            <ProjectStudio />
+            <ProjectStudio onSaveIdea={handleSaveIdea} />
           ) : (
             <>
               {/* Error Banner with guaranteed retry */}
@@ -620,6 +660,13 @@ export default function App() {
             setPendingLockedEntry(null);
           }}
         />
+      )}
+
+      {/* Studio Toast Notification */}
+      {studioToast && (
+        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-xl bg-stone-900 text-stone-50 text-xs sm:text-sm font-medium shadow-lg border border-stone-700 animate-fadeIn">
+          {studioToast}
+        </div>
       )}
     </div>
   );

@@ -1,5 +1,5 @@
 import { getIdToken } from "../firebase";
-import { ChatMessage, ReflectionMode, SummaryResult, SentimentResult } from "../types";
+import { ChatMessage, ReflectionMode, SummaryResult, SentimentResult, ProjectIdea } from "../types";
 
 export interface ChatApiResponse {
   text: string;
@@ -126,20 +126,8 @@ export async function callMultiAgentReflect(
   return await response.json();
 }
 
-export interface IdeateResponse {
+export interface IdeateResponse extends ProjectIdea {
   id: string;
-  title?: string;
-  idea?: string;
-  oneLiner?: string;
-  capabilities?: { name: string; why: string; docUrl: string | null }[];
-  stack?: string[];
-  uiComponents?: string[];
-  infra?: string[];
-  dataFlow?: string;
-  milestones?: string[];
-  risks?: string[];
-  firstStep?: string;
-  modelUsed?: string;
 }
 
 export async function ideate(seed: string): Promise<IdeateResponse> {

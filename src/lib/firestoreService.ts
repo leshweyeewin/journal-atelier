@@ -68,6 +68,7 @@ export async function saveInteraction(
     themes: Array.isArray(entry.themes) ? entry.themes : undefined,
     coachPrompt: entry.coachPrompt !== undefined ? entry.coachPrompt : undefined,
     locked: entry.locked === true ? true : undefined,
+    projectIdea: entry.projectIdea !== undefined ? entry.projectIdea : undefined,
     createdAt: entry.createdAt || now,
     updatedAt: now,
   };
