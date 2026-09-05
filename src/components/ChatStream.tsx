@@ -169,7 +169,22 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
 
                   {isModel ? (
                     <div className="prose prose-stone prose-xs max-w-none prose-p:my-1 prose-headings:my-1.5 prose-ul:my-1">
-                      <Markdown>{msg.content}</Markdown>
+                      <Markdown
+                        disallowedElements={["script", "iframe", "object", "embed", "style", "form", "input"]}
+                        urlTransform={(url: string) => {
+                          const clean = (url || "").trim().toLowerCase();
+                          if (
+                            clean.startsWith("javascript:") ||
+                            clean.startsWith("data:") ||
+                            clean.startsWith("vbscript:")
+                          ) {
+                            return "";
+                          }
+                          return url;
+                        }}
+                      >
+                        {msg.content}
+                      </Markdown>
                     </div>
                   ) : (
                     <p className="whitespace-pre-wrap">{msg.content}</p>
