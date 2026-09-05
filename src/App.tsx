@@ -175,7 +175,6 @@ export default function App() {
   const handleDeleteEntry = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!currentUser) return;
-    if (!window.confirm("Are you sure you want to delete this reflection?")) return;
 
     try {
       await deleteInteraction(currentUser.uid, id);

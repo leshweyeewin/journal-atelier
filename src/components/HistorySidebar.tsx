@@ -22,6 +22,7 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
   onToggleCollapse,
 }) => {
   const [searchQuery, setSearchQuery] = useState("");
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
   const safeEntries = Array.isArray(entries) ? entries : [];
 
@@ -183,15 +184,46 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
                     )}
                   </div>
 
-                  <button
-                    id={`delete-entry-btn-${entry.id}`}
-                    onClick={(e) => onDeleteEntry(entry.id, e)}
-                    title="Delete Entry"
-                    className="opacity-0 group-hover:opacity-100 p-1 text-stone-400 hover:text-red-600 rounded transition cursor-pointer"
-                    aria-label="Delete entry"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                  {confirmingId === entry.id ? (
+                    <span className="flex items-center gap-1.5 text-[11px]">
+                      <span className="text-stone-500">Delete?</span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDeleteEntry(entry.id, e);
+                          setConfirmingId(null);
+                        }}
+                        className="font-medium text-red-600 hover:text-red-700 cursor-pointer px-1 py-0.5 rounded hover:bg-red-50 transition"
+                      >
+                        Delete
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setConfirmingId(null);
+                        }}
+                        className="text-stone-500 hover:text-stone-700 cursor-pointer px-1 py-0.5 rounded hover:bg-stone-100 transition"
+                      >
+                        Cancel
+                      </button>
+                    </span>
+                  ) : (
+                    <button
+                      id={`delete-entry-btn-${entry.id}`}
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setConfirmingId(entry.id);
+                      }}
+                      title="Delete Entry"
+                      className="opacity-0 group-hover:opacity-100 p-1 text-stone-400 hover:text-red-600 rounded transition cursor-pointer"
+                      aria-label="Delete entry"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
               </div>
             );
