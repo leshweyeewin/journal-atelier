@@ -41,7 +41,15 @@ export interface JournalInteraction {
   themes?: string[];
   coachPrompt?: string;
   modelUsed?: string;
+  locked?: boolean;
   createdAt: number;
+  updatedAt: number;
+}
+
+export interface SecuritySettings {
+  salt: string;
+  hash: string;
+  iterations: number;
   updatedAt: number;
 }
 

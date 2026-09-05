@@ -7,9 +7,10 @@ import {
   orderBy,
   onSnapshot,
   getDocs,
+  getDoc,
 } from "firebase/firestore";
 import { db } from "../firebase";
-import { JournalInteraction } from "../types";
+import { JournalInteraction, SecuritySettings } from "../types";
 
 /**
  * Strict Undefined-Stripping utility to prevent Firestore SDK crash.
@@ -66,6 +67,7 @@ export async function saveInteraction(
     sentiment: entry.sentiment !== undefined ? entry.sentiment : undefined,
     themes: Array.isArray(entry.themes) ? entry.themes : undefined,
     coachPrompt: entry.coachPrompt !== undefined ? entry.coachPrompt : undefined,
+    locked: entry.locked === true ? true : undefined,
     createdAt: entry.createdAt || now,
     updatedAt: now,
   };
@@ -150,3 +152,23 @@ export async function deleteInteraction(userId: string, interactionId: string): 
   const docRef = doc(db, "users", userId, "interactions", interactionId);
   await deleteDoc(docRef);
 }
+
+export async function getSecuritySettings(userId: string): Promise<SecuritySettings | null> {
+  if (!userId) return null;
+  const ref = doc(db, "users", userId, "settings", "security");
+  const snap = await getDoc(ref);
+  return snap.exists() ? (snap.data() as SecuritySettings) : null;
+}
+
+export async function setSecuritySettings(userId: string, s: SecuritySettings): Promise<void> {
+  if (!userId) throw new Error("User ID required");
+  const ref = doc(db, "users", userId, "settings", "security");
+  await setDoc(ref, sanitizeForFirestore(s), { merge: true });
+}
+
+export async function setInteractionLocked(userId: string, id: string, locked: boolean): Promise<void> {
+  if (!userId || !id) return;
+  const ref = doc(db, "users", userId, "interactions", id);
+  await setDoc(ref, { locked }, { merge: true });
+}
+

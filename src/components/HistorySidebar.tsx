@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Search, Calendar, Trash2, Tag, ChevronRight, ChevronLeft, BookMarked, Sparkles } from "lucide-react";
+import { Search, Calendar, Trash2, Tag, ChevronRight, ChevronLeft, BookMarked, Sparkles, Lock, LockOpen } from "lucide-react";
 import { JournalInteraction } from "../types";
 
 interface HistorySidebarProps {
@@ -10,6 +10,9 @@ interface HistorySidebarProps {
   isLoading?: boolean;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
+  isUnlocked: boolean;
+  onToggleLock: (entry: JournalInteraction) => void;
+  onRequestUnlock: () => void;
 }
 
 export const HistorySidebar: React.FC<HistorySidebarProps> = ({
@@ -20,6 +23,9 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
   isLoading,
   isCollapsed = false,
   onToggleCollapse,
+  isUnlocked,
+  onToggleLock,
+  onRequestUnlock,
 }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
@@ -28,6 +34,10 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
 
   const filteredEntries = safeEntries.filter((item) => {
     if (!item) return false;
+    // SEARCH SAFETY: locked content must never surface via search while locked
+    if (item.locked && !isUnlocked && searchQuery.trim()) {
+      return false;
+    }
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
     const titleMatch = item.title?.toLowerCase().includes(q);
@@ -144,11 +154,17 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
         ) : (
           filteredEntries.map((entry) => {
             const isActive = entry.id === activeEntryId;
+            const isMasked = entry.locked && !isUnlocked;
+            const cardTitle = isMasked ? "🔒 Locked entry" : (entry.title || "Untitled Reflection");
+            const cardPreview = isMasked
+              ? "Enter your PIN to view"
+              : (entry.content || (entry.messages && entry.messages.length > 0 ? entry.messages[0].content : "No reflection body yet..."));
+
             return (
               <div
                 key={entry.id}
                 id={`sidebar-entry-${entry.id}`}
-                onClick={() => onSelectEntry(entry)}
+                onClick={() => (isMasked ? onRequestUnlock() : onSelectEntry(entry))}
                 className={`group relative p-3 rounded-xl border text-left cursor-pointer transition-all ${
                   isActive
                     ? "bg-white border-stone-400 shadow-xs ring-1 ring-stone-900/5"
@@ -156,8 +172,8 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
                 }`}
               >
                 <div className="flex items-start justify-between gap-2 mb-1">
-                  <h3 className="text-xs font-semibold text-stone-900 truncate flex-1">
-                    {entry.title || "Untitled Reflection"}
+                  <h3 className={`text-xs font-semibold truncate flex-1 ${isMasked ? "text-stone-500 italic" : "text-stone-900"}`}>
+                    {cardTitle}
                   </h3>
                   <span className="text-[10px] text-stone-400 shrink-0 flex items-center gap-1">
                     <Calendar className="w-2.5 h-2.5" />
@@ -165,65 +181,91 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
                   </span>
                 </div>
 
-                <p className="text-[11px] text-stone-500 line-clamp-2 mb-2 leading-relaxed">
-                  {entry.content || (entry.messages && entry.messages.length > 0 ? entry.messages[0].content : "No reflection body yet...")}
+                <p className={`text-[11px] line-clamp-2 mb-2 leading-relaxed ${isMasked ? "text-stone-400 italic" : "text-stone-500"}`}>
+                  {cardPreview}
                 </p>
 
                 <div className="flex items-center justify-between pt-1 border-t border-stone-100">
                   <div className="flex items-center gap-1.5 flex-wrap overflow-hidden">
-                    {entry.mood && (
+                    {!isMasked && entry.mood && (
                       <span className="inline-flex items-center text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200/60 font-medium">
                         {entry.mood}
                       </span>
                     )}
-                    {entry.messages && entry.messages.length > 0 && (
+                    {!isMasked && entry.messages && entry.messages.length > 0 && (
                       <span className="inline-flex items-center gap-0.5 text-[10px] text-stone-500">
                         <Sparkles className="w-2.5 h-2.5 text-stone-400" />
                         {entry.messages.length}
                       </span>
                     )}
+                    {entry.locked && (
+                      <span className="inline-flex items-center gap-1 text-[10px] text-amber-700 font-medium">
+                        <Lock className="w-2.5 h-2.5" />
+                        <span>{isUnlocked ? "Protected" : "Locked"}</span>
+                      </span>
+                    )}
                   </div>
 
-                  {confirmingId === entry.id ? (
-                    <span className="flex items-center gap-1.5 text-[11px]">
-                      <span className="text-stone-500">Delete?</span>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onDeleteEntry(entry.id, e);
-                          setConfirmingId(null);
-                        }}
-                        className="font-medium text-red-600 hover:text-red-700 cursor-pointer px-1 py-0.5 rounded hover:bg-red-50 transition"
-                      >
-                        Delete
-                      </button>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setConfirmingId(null);
-                        }}
-                        className="text-stone-500 hover:text-stone-700 cursor-pointer px-1 py-0.5 rounded hover:bg-stone-100 transition"
-                      >
-                        Cancel
-                      </button>
-                    </span>
-                  ) : (
+                  <div className="flex items-center gap-0.5">
                     <button
-                      id={`delete-entry-btn-${entry.id}`}
+                      id={`lock-entry-btn-${entry.id}`}
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        setConfirmingId(entry.id);
+                        onToggleLock(entry);
                       }}
-                      title="Delete Entry"
-                      className="opacity-0 group-hover:opacity-100 p-1 text-stone-400 hover:text-red-600 rounded transition cursor-pointer"
-                      aria-label="Delete entry"
+                      title={entry.locked ? "Unlock entry" : "Lock entry"}
+                      className="opacity-60 group-hover:opacity-100 p-1 text-stone-400 hover:text-amber-700 rounded transition cursor-pointer"
+                      aria-label={entry.locked ? "Unlock entry" : "Lock entry"}
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
+                      {entry.locked ? (
+                        <Lock className="w-3.5 h-3.5 text-amber-700" />
+                      ) : (
+                        <LockOpen className="w-3.5 h-3.5" />
+                      )}
                     </button>
-                  )}
+
+                    {confirmingId === entry.id ? (
+                      <span className="flex items-center gap-1.5 text-[11px]">
+                        <span className="text-stone-500">Delete?</span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDeleteEntry(entry.id, e);
+                            setConfirmingId(null);
+                          }}
+                          className="font-medium text-red-600 hover:text-red-700 cursor-pointer px-1 py-0.5 rounded hover:bg-red-50 transition"
+                        >
+                          Delete
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setConfirmingId(null);
+                          }}
+                          className="text-stone-500 hover:text-stone-700 cursor-pointer px-1 py-0.5 rounded hover:bg-stone-100 transition"
+                        >
+                          Cancel
+                        </button>
+                      </span>
+                    ) : (
+                      <button
+                        id={`delete-entry-btn-${entry.id}`}
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setConfirmingId(entry.id);
+                        }}
+                        title="Delete Entry"
+                        className="opacity-60 group-hover:opacity-100 p-1 text-stone-400 hover:text-red-600 rounded transition cursor-pointer"
+                        aria-label="Delete entry"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             );
