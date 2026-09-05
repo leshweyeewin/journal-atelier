@@ -10,6 +10,7 @@ import { ChatStream } from "./components/ChatStream";
 import { SummaryCard, AgentLoadingState } from "./components/SummaryCard";
 import { ErrorBanner } from "./components/ErrorBanner";
 import { TelegramSettings } from "./components/TelegramSettings";
+import { ProjectStudio } from "./components/ProjectStudio";
 import {
   saveInteraction,
   subscribeUserInteractions,
@@ -48,6 +49,7 @@ export default function App() {
   const [isTelegramConnected, setIsTelegramConnected] = useState(false);
   const [isTelegramModalOpen, setIsTelegramModalOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [view, setView] = useState<"journal" | "studio">("journal");
 
   // Listen to Firebase Authentication state
   useEffect(() => {
@@ -127,10 +129,12 @@ export default function App() {
     setLastSavedAt(null);
     setErrorMessage(null);
     setFailedSavePayload(null);
+    setView("journal");
   }, []);
 
   // Handler to select an existing reflection from history
   const handleSelectEntry = useCallback((entry: JournalInteraction) => {
+    setView("journal");
     setActiveId(entry.id);
     setTitle(entry.title || "");
     setContent(entry.content || "");
@@ -410,6 +414,8 @@ export default function App() {
         isSaving={isSaving}
         isTelegramConnected={isTelegramConnected}
         onOpenTelegramSettings={() => setIsTelegramModalOpen(true)}
+        view={view}
+        onNavigate={setView}
       />
 
       {/* Main App Layout */}
@@ -425,65 +431,71 @@ export default function App() {
           onToggleCollapse={() => setIsSidebarCollapsed((prev) => !prev)}
         />
 
-        {/* Main Stage: Active Journal Atelier */}
+        {/* Main Stage: Active Journal Atelier or Project Studio */}
         <main className="flex-1 p-4 sm:p-6 overflow-y-auto flex flex-col">
-          {/* Error Banner with guaranteed retry */}
-          {errorMessage && (
-            <div className="mb-4">
-              <ErrorBanner
-                message={errorMessage}
-                onRetry={
-                  failedSavePayload
-                    ? () => persistToFirestore(failedSavePayload)
-                    : undefined
-                }
-                onDismiss={() => {
-                  setErrorMessage(null);
-                  setFailedSavePayload(null);
-                }}
+          {view === "studio" ? (
+            <ProjectStudio />
+          ) : (
+            <>
+              {/* Error Banner with guaranteed retry */}
+              {errorMessage && (
+                <div className="mb-4">
+                  <ErrorBanner
+                    message={errorMessage}
+                    onRetry={
+                      failedSavePayload
+                        ? () => persistToFirestore(failedSavePayload)
+                        : undefined
+                    }
+                    onDismiss={() => {
+                      setErrorMessage(null);
+                      setFailedSavePayload(null);
+                    }}
+                  />
+                </div>
+              )}
+
+              {/* AI Summary & Multi-Agent Reflection Card if present or analyzing */}
+              {(summaryData || agentLoadingState) && (
+                <SummaryCard
+                  summary={summaryData}
+                  agentLoadingState={agentLoadingState}
+                  onApplyTitle={(suggested) => setTitle(suggested)}
+                  onClose={() => {
+                    setSummaryData(null);
+                    setAgentLoadingState(null);
+                  }}
+                />
+              )}
+
+              {/* Core Journal / Reflection Composer */}
+              <JournalEditor
+                title={title}
+                setTitle={setTitle}
+                content={content}
+                setContent={setContent}
+                mode={mode}
+                setMode={setMode}
+                onReflectWithAI={handleReflectWithAI}
+                onSummarizeWithAI={handleSummarizeWithAI}
+                onSave={handleManualSave}
+                isSaving={isSaving}
+                isAiReflecting={isAiReflecting}
+                isAiSummarizing={isAiSummarizing}
+                lastSavedAt={lastSavedAt}
               />
-            </div>
+
+              {/* Multi-turn Dialogue Stream with Gemini */}
+              <div className="flex-1 min-h-[360px]">
+                <ChatStream
+                  messages={messages}
+                  onSendMessage={handleSendChatMessage}
+                  isLoading={isAiReflecting}
+                  disabled={!content.trim() && messages.length === 0}
+                />
+              </div>
+            </>
           )}
-
-          {/* AI Summary & Multi-Agent Reflection Card if present or analyzing */}
-          {(summaryData || agentLoadingState) && (
-            <SummaryCard
-              summary={summaryData}
-              agentLoadingState={agentLoadingState}
-              onApplyTitle={(suggested) => setTitle(suggested)}
-              onClose={() => {
-                setSummaryData(null);
-                setAgentLoadingState(null);
-              }}
-            />
-          )}
-
-          {/* Core Journal / Reflection Composer */}
-          <JournalEditor
-            title={title}
-            setTitle={setTitle}
-            content={content}
-            setContent={setContent}
-            mode={mode}
-            setMode={setMode}
-            onReflectWithAI={handleReflectWithAI}
-            onSummarizeWithAI={handleSummarizeWithAI}
-            onSave={handleManualSave}
-            isSaving={isSaving}
-            isAiReflecting={isAiReflecting}
-            isAiSummarizing={isAiSummarizing}
-            lastSavedAt={lastSavedAt}
-          />
-
-          {/* Multi-turn Dialogue Stream with Gemini */}
-          <div className="flex-1 min-h-[360px]">
-            <ChatStream
-              messages={messages}
-              onSendMessage={handleSendChatMessage}
-              isLoading={isAiReflecting}
-              disabled={!content.trim() && messages.length === 0}
-            />
-          </div>
         </main>
       </div>
 
