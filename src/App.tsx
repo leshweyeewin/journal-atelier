@@ -29,6 +29,7 @@ import {
   callMultiAgentReflect,
   getTelegramSettings,
   notifyProjectSaved,
+  notifyEntrySaved,
 } from "./lib/geminiApi";
 
 export default function App() {
@@ -65,14 +66,11 @@ export default function App() {
   const isFirstMountRef = useRef(true);
   const lastSavedSnapshotRef = useRef<string>("");
   const hasAutoLandedRef = useRef(false);
+  const newEntryPendingNotifyRef = useRef(false);
 
-  // Auto-collapse reflections HistorySidebar when user is not in journal view, and restore when returning
+  // Auto-collapse sidebar on view change
   useEffect(() => {
-    if (view !== "journal") {
-      setIsSidebarCollapsed(true);
-    } else {
-      setIsSidebarCollapsed(false);
-    }
+    setIsSidebarCollapsed(true);
   }, [view]);
 
   // Auto-dismiss studio toast
@@ -142,6 +140,7 @@ export default function App() {
             setView("dashboard");
           } else {
             setView("journal");
+            newEntryPendingNotifyRef.current = true;
           }
         }
       },
@@ -181,6 +180,7 @@ export default function App() {
 
   // Handler to start a brand new reflection
   const handleNewEntry = useCallback(() => {
+    newEntryPendingNotifyRef.current = true;
     setUnlockedEntryId(null);
     const newId = `entry_${Date.now()}`;
     setActiveId(newId);
@@ -202,6 +202,7 @@ export default function App() {
   // Extracted entry loader
   const openEntry = useCallback(
     (entry: JournalInteraction) => {
+      newEntryPendingNotifyRef.current = false;
       setView("journal");
       setActiveId(entry.id);
       setTitle(entry.title || "");
@@ -334,8 +335,8 @@ export default function App() {
   };
 
   // Handler to delete a reflection
-  const handleDeleteEntry = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleDeleteEntry = async (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
     if (!currentUser) return;
 
     try {
@@ -458,6 +459,10 @@ export default function App() {
     try {
       const saved = await saveInteraction(currentUser.uid, payloadToSave);
       setLastSavedAt(Date.now());
+      if (newEntryPendingNotifyRef.current && !activeLocked) {
+        notifyEntrySaved({ title: payloadToSave.title });
+      }
+      newEntryPendingNotifyRef.current = false;
       setFailedSavePayload(null);
       lastSavedSnapshotRef.current = `${activeId}:${payloadToSave.title}:${payloadToSave.content}:${JSON.stringify(payloadToSave.tags || [])}`;
       return saved;
@@ -767,17 +772,24 @@ export default function App() {
 
       {/* Main App Layout */}
       <div className="flex-1 flex flex-col md:flex-row w-full max-w-[1700px] mx-auto px-2 sm:px-4 lg:px-6">
-        {/* Left Sidebar: Isolated User Reflections History */}
-        <HistorySidebar
-          entries={interactions}
-          activeEntryId={activeId}
-          onSelectEntry={handleSelectEntry}
-          onDeleteEntry={handleDeleteEntry}
-          isLoading={listLoading}
-          isCollapsed={isSidebarCollapsed}
-          onToggleCollapse={() => setIsSidebarCollapsed((prev) => !prev)}
-          onToggleLock={handleToggleLock}
-        />
+        {/* Left Sidebar: Context-aware reflections or saved projects history (hidden on dashboard Trends) */}
+        {view !== "dashboard" && (
+          <HistorySidebar
+            entries={
+              view === "studio"
+                ? interactions.filter((e) => e.projectIdea)
+                : interactions.filter((e) => !e.projectIdea)
+            }
+            variant={view === "studio" ? "projects" : "reflections"}
+            activeEntryId={activeId}
+            onSelectEntry={handleSelectEntry}
+            onDeleteEntry={handleDeleteEntry}
+            isLoading={listLoading}
+            isCollapsed={isSidebarCollapsed}
+            onToggleCollapse={() => setIsSidebarCollapsed((prev) => !prev)}
+            onToggleLock={handleToggleLock}
+          />
+        )}
 
         {/* Main Stage: Active Journal Atelier, Project Studio, or Dashboard Trends */}
         <main className="flex-1 p-4 sm:p-6 overflow-y-auto flex flex-col">
@@ -790,7 +802,8 @@ export default function App() {
             />
           ) : view === "dashboard" ? (
             <DashboardView
-              entries={interactions}
+              allEntries={interactions}
+              entries={interactions.filter((e) => !e.projectIdea)}
               onSelectEntry={handleSelectEntry}
               onNewEntry={handleNewEntry}
             />

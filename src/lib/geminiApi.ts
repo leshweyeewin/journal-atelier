@@ -302,6 +302,24 @@ export async function notifyProjectSaved(payload: {
 }
 
 /**
+ * Send an outbound Telegram notification when a new reflection entry is saved.
+ * Fire-and-forget: swallows errors and never throws so it won't block UI state.
+ */
+export async function notifyEntrySaved(payload: { title?: string }): Promise<void> {
+  try {
+    const token = await getIdToken();
+    if (!token) return;
+    await fetch("/api/notify/entry-saved", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify(payload),
+    });
+  } catch (err) {
+    console.warn("[Telegram] Failed to dispatch entry-saved notification:", err);
+  }
+}
+
+/**
  * Send an outbound Telegram notification with this week's digest.
  * Fire-and-forget: swallows errors and never throws so it won't block UI state.
  */

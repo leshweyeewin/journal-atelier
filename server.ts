@@ -1541,6 +1541,27 @@ app.post("/api/notify/project-saved", verifyUserToken, async (req: Request, res:
   return res.json({ success: true });
 });
 
+app.post("/api/notify/entry-saved", verifyUserToken, async (req: Request, res: Response) => {
+  const uid = (req as any).user?.uid;
+  if (!uid) return res.status(401).json({ error: "Unauthorized" });
+  const data = req.body && typeof req.body === "object" ? req.body : {};
+  const rawTitle = typeof data.title === "string" ? data.title : "";
+  try {
+    const authHeader = req.headers.authorization || "";
+    const userToken = authHeader.replace(/^Bearer\s+/i, "");
+    const telegramChatId = await getTelegramChatIdForUser(uid, userToken);
+    if (telegramChatId) {
+      const title = sanitizeTelegramField(rawTitle, 150);
+      const messageText = ["📝 Journal Atelier — New Reflection Saved", title ? `Title: ${title}` : ""]
+        .filter(Boolean).join("\n\n");
+      await sendTelegram(telegramChatId, messageText);
+    }
+  } catch (err: any) {
+    console.warn("[Telegram] entry-saved delivery warning:", err?.message || err);
+  }
+  return res.json({ success: true });
+});
+
 /**
  * Outbound Weekly Digest Endpoint (Section 11 External Notification Security)
  * 1. Protected by verifyUserToken; derives uid strictly from req.user.uid.
@@ -1565,15 +1586,15 @@ app.post("/api/notify/weekly-digest", verifyUserToken, async (req: Request, res:
       return res.json({ success: true, message: "No Telegram connected" });
     }
 
-    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const now = Date.now();
+    const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
     const pastEntries: any[] = [];
 
-    // 1. Query Firestore using Admin SDK
+    // 1. Query Firestore using Admin SDK (without orderBy to avoid excluding documents lacking createdAt)
     try {
       const db = getAdminDb();
       const snapshot = await db
         .collection(`users/${uid}/interactions`)
-        .orderBy("createdAt", "desc")
         .limit(50)
         .get();
 
@@ -1681,8 +1702,12 @@ app.post("/api/notify/weekly-digest", verifyUserToken, async (req: Request, res:
         return `• ${sanitizeTelegramField(rawT, 100)}`;
       });
 
+    const fmtShort = (ms: number) => new Date(ms).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+    const fmtFull  = (ms: number) => new Date(ms).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+    const weekRange = `${fmtShort(sevenDaysAgo)} to ${fmtFull(now)}`;
+
     const lines: string[] = [
-      "🗓️ Journal Atelier — Your week",
+      `🗓️ Journal Atelier — ${weekRange}`,
       `Entries: ${totalCount}`,
     ];
     if (moodString) {

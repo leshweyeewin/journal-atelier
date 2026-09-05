@@ -13,6 +13,7 @@ interface HistorySidebarProps {
   isUnlocked?: boolean;
   onToggleLock: (entry: JournalInteraction) => void;
   onRequestUnlock?: () => void;
+  variant?: "reflections" | "projects";
 }
 
 export const HistorySidebar: React.FC<HistorySidebarProps> = ({
@@ -24,7 +25,12 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
   isCollapsed = false,
   onToggleCollapse,
   onToggleLock,
+  variant = "reflections",
 }) => {
+  const isProjects = variant === "projects";
+  const noun = isProjects ? "project" : "entry";
+  const nounPlural = isProjects ? "projects" : "entries";
+
   const [searchQuery, setSearchQuery] = useState("");
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
@@ -40,13 +46,20 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
     const q = searchQuery.toLowerCase();
     const titleMatch = item.title?.toLowerCase().includes(q);
     const contentMatch = item.content?.toLowerCase().includes(q);
-    const tagMatch = Array.isArray(item.tags) && item.tags.some((t) => typeof t === "string" && t.toLowerCase().includes(q));
+    const tagMatch =
+      (Array.isArray(item.tags) && item.tags.some((t) => typeof t === "string" && t.toLowerCase().includes(q))) ||
+      (Array.isArray(item.projectIdea?.tags) && item.projectIdea!.tags!.some((t) => typeof t === "string" && t.toLowerCase().includes(q)));
+    const stageMatch = item.projectIdea?.stage?.toLowerCase().includes(q);
     const moodMatch = item.mood?.toLowerCase().includes(q);
     const themeMatch = Array.isArray(item.themes) && item.themes.some((t) => typeof t === "string" && t.toLowerCase().includes(q));
     const coachMatch = item.coachPrompt?.toLowerCase().includes(q);
-    const ideaMatch = typeof (item as any).idea === "string" && (item as any).idea.toLowerCase().includes(q);
-    const oneLinerMatch = typeof (item as any).oneLiner === "string" && (item as any).oneLiner.toLowerCase().includes(q);
-    return titleMatch || contentMatch || tagMatch || moodMatch || themeMatch || coachMatch || ideaMatch || oneLinerMatch;
+    const ideaMatch =
+      (typeof (item as any).idea === "string" && (item as any).idea.toLowerCase().includes(q)) ||
+      (typeof item.projectIdea?.idea === "string" && item.projectIdea.idea.toLowerCase().includes(q));
+    const oneLinerMatch =
+      (typeof (item as any).oneLiner === "string" && (item as any).oneLiner.toLowerCase().includes(q)) ||
+      (typeof item.projectIdea?.oneLiner === "string" && item.projectIdea.oneLiner.toLowerCase().includes(q));
+    return titleMatch || contentMatch || tagMatch || stageMatch || moodMatch || themeMatch || coachMatch || ideaMatch || oneLinerMatch;
   });
 
   const formatDate = (timestamp: number | string | undefined) => {
@@ -72,16 +85,20 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
           id="sidebar-expand-btn"
           type="button"
           onClick={onToggleCollapse}
-          title="Expand reflections sidebar"
+          title={isProjects ? "Expand saved projects sidebar" : "Expand reflections sidebar"}
           className="p-2 rounded-lg text-stone-600 hover:text-stone-900 hover:bg-stone-200/60 active:scale-95 transition cursor-pointer flex items-center md:flex-col gap-1.5"
           aria-label="Expand sidebar"
         >
-          <BookMarked className="w-4 h-4 text-stone-700" />
+          {isProjects ? (
+            <Sparkles className="w-4 h-4 text-amber-700" />
+          ) : (
+            <BookMarked className="w-4 h-4 text-stone-700" />
+          )}
           <ChevronRight className="w-3.5 h-3.5 text-stone-400" />
         </button>
 
         <span className="text-[10px] font-medium text-stone-400 md:[writing-mode:vertical-lr] tracking-wider uppercase select-none">
-          Reflections ({safeEntries.length})
+          {isProjects ? "Projects" : "Reflections"} ({safeEntries.length})
         </span>
       </aside>
     );
@@ -96,12 +113,18 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
       <div className="p-4 border-b border-stone-200 space-y-3 bg-white/60">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <BookMarked className="w-4 h-4 text-stone-700" />
-            <h2 className="text-sm font-semibold text-stone-900">Your Reflections</h2>
+            {isProjects ? (
+              <Sparkles className="w-4 h-4 text-amber-700" />
+            ) : (
+              <BookMarked className="w-4 h-4 text-stone-700" />
+            )}
+            <h2 className="text-sm font-semibold text-stone-900">
+              {isProjects ? "Your Projects" : "Your Reflections"}
+            </h2>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-stone-100 text-stone-600">
-              {safeEntries.length} {safeEntries.length === 1 ? "entry" : "entries"}
+              {safeEntries.length} {safeEntries.length === 1 ? noun : nounPlural}
             </span>
             {onToggleCollapse && (
               <button
@@ -125,7 +148,7 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search entries or tags..."
+            placeholder={isProjects ? "Search projects..." : "Search entries or tags..."}
             className="w-full pl-9 pr-3 py-1.5 text-xs rounded-lg border border-stone-200 bg-white placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-stone-900/10 focus:border-stone-400 transition"
           />
         </div>
@@ -136,16 +159,26 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
         {isLoading ? (
           <div className="flex flex-col items-center justify-center py-12 text-stone-400 space-y-2">
             <span className="w-5 h-5 border-2 border-stone-300 border-t-stone-700 rounded-full animate-spin" />
-            <span className="text-xs">Loading isolated entries...</span>
+            <span className="text-xs">
+              {isProjects ? "Loading saved projects..." : "Loading isolated entries..."}
+            </span>
           </div>
         ) : filteredEntries.length === 0 ? (
           <div className="text-center py-12 px-4">
             <p className="text-xs text-stone-500 font-medium">
-              {searchQuery ? "No entries match your search." : "No reflections saved yet."}
+              {searchQuery
+                ? isProjects
+                  ? "No projects match your search."
+                  : "No entries match your search."
+                : isProjects
+                ? "No projects saved yet."
+                : "No reflections saved yet."}
             </p>
             <p className="text-[11px] text-stone-400 mt-1">
               {searchQuery
                 ? "Try a different keyword or tag."
+                : isProjects
+                ? "Generate an idea in the Project Studio to get started."
                 : "Type your thoughts on the right and ask Gemini to reflect or summarize."}
             </p>
           </div>
@@ -153,7 +186,19 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
           filteredEntries.map((entry) => {
             const isActive = entry.id === activeEntryId;
             const isLocked = Boolean(entry.locked);
-            const cardTitle = entry.title || "Untitled Reflection";
+            const cardTitle =
+              entry.projectIdea?.title ||
+              entry.title ||
+              (isProjects ? "Untitled Project" : "Untitled Reflection");
+            const previewSnippet =
+              entry.projectIdea?.oneLiner ||
+              entry.projectIdea?.idea ||
+              entry.content ||
+              (entry.messages && entry.messages.length > 0
+                ? entry.messages[0].content
+                : isProjects
+                ? "No project description yet..."
+                : "No reflection body yet...");
 
             return (
               <div
@@ -178,7 +223,7 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
                       </span>
                     ) : (
                       <>
-                        {entry.projectIdea && (
+                        {entry.projectIdea && !isProjects && (
                           <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-amber-100/80 text-amber-900 border border-amber-300/70">
                             <Sparkles className="w-2.5 h-2.5 text-amber-600 shrink-0" />
                             <span>Project</span>
@@ -196,30 +241,53 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
                 {!isLocked && (
                   <>
                     <p className="text-[11px] line-clamp-2 mb-2 leading-relaxed text-stone-500">
-                      {entry.content || (entry.messages && entry.messages.length > 0 ? entry.messages[0].content : "No reflection body yet...")}
+                      {previewSnippet}
                     </p>
 
                     <div className="flex items-center justify-between pt-1 border-t border-stone-100">
                       <div className="flex items-center gap-1.5 flex-wrap overflow-hidden">
-                        {(entry.sentiment?.tag || entry.mood) && (
-                          <span className="inline-flex items-center text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200/60 font-medium">
-                            {entry.sentiment?.tag || entry.mood}
-                          </span>
-                        )}
-                        {entry.tags && entry.tags.length > 0 && (
-                          <span className="inline-flex items-center gap-0.5 text-[10px] text-stone-600 max-w-[110px] truncate bg-stone-100/90 px-1.5 py-0.5 rounded border border-stone-200/60 font-medium">
-                            <Tag className="w-2.5 h-2.5 text-stone-400 shrink-0" />
-                            <span className="truncate">#{entry.tags[0]}</span>
-                            {entry.tags.length > 1 && (
-                              <span className="text-[9px] text-stone-400">+{entry.tags.length - 1}</span>
+                        {!entry.projectIdea && (
+                          <>
+                            {(entry.sentiment?.tag || entry.mood) && (
+                              <span className="inline-flex items-center text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200/60 font-medium">
+                                {entry.sentiment?.tag || entry.mood}
+                              </span>
                             )}
-                          </span>
+                            {entry.tags && entry.tags.length > 0 && (
+                              <span className="inline-flex items-center gap-0.5 text-[10px] text-stone-600 max-w-[110px] truncate bg-stone-100/90 px-1.5 py-0.5 rounded border border-stone-200/60 font-medium">
+                                <Tag className="w-2.5 h-2.5 text-stone-400 shrink-0" />
+                                <span className="truncate">#{entry.tags[0]}</span>
+                                {entry.tags.length > 1 && (
+                                  <span className="text-[9px] text-stone-400">+{entry.tags.length - 1}</span>
+                                )}
+                              </span>
+                            )}
+                            {entry.messages && entry.messages.length > 0 && (
+                              <span className="inline-flex items-center gap-0.5 text-[10px] text-stone-500">
+                                <Sparkles className="w-2.5 h-2.5 text-stone-400" />
+                                {entry.messages.length}
+                              </span>
+                            )}
+                          </>
                         )}
-                        {entry.messages && entry.messages.length > 0 && (
-                          <span className="inline-flex items-center gap-0.5 text-[10px] text-stone-500">
-                            <Sparkles className="w-2.5 h-2.5 text-stone-400" />
-                            {entry.messages.length}
-                          </span>
+
+                        {entry.projectIdea && (
+                          <>
+                            {entry.projectIdea?.stage && (
+                              <span className="inline-flex items-center text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200/60 font-medium">
+                                {entry.projectIdea.stage}
+                              </span>
+                            )}
+                            {Array.isArray(entry.projectIdea?.tags) && entry.projectIdea!.tags!.length > 0 && (
+                              <span className="inline-flex items-center gap-0.5 text-[10px] text-stone-600 max-w-[110px] truncate bg-stone-100/90 px-1.5 py-0.5 rounded border border-stone-200/60 font-medium">
+                                <Tag className="w-2.5 h-2.5 text-stone-400 shrink-0" />
+                                <span className="truncate">#{entry.projectIdea!.tags![0]}</span>
+                                {entry.projectIdea!.tags!.length > 1 && (
+                                  <span className="text-[9px] text-stone-400">+{entry.projectIdea!.tags!.length - 1}</span>
+                                )}
+                              </span>
+                            )}
+                          </>
                         )}
                       </div>
 

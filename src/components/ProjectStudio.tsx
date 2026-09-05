@@ -28,6 +28,15 @@ const IDEATION_STAGES = [
   "Planning your first actionable steps…",
 ];
 
+const PROJECT_STAGES = ["Idea", "Planning", "Building", "Testing", "Shipped"];
+const STAGE_STYLES: Record<string, string> = {
+  Idea: "bg-stone-100 text-stone-700 border-stone-200",
+  Planning: "bg-amber-50 text-amber-800 border-amber-200",
+  Building: "bg-blue-50 text-blue-700 border-blue-200",
+  Testing: "bg-purple-50 text-purple-700 border-purple-200",
+  Shipped: "bg-emerald-50 text-emerald-700 border-emerald-200",
+};
+
 interface ProjectStudioProps {
   onSaveIdea?: (idea: ProjectIdea) => Promise<void> | void;
   onUpdateIdea?: (id: string, patch: Partial<ProjectIdea>) => Promise<void> | void;
@@ -56,6 +65,9 @@ export const ProjectStudio: React.FC<ProjectStudioProps> = ({
   const [editOneLiner, setEditOneLiner] = useState("");
   const [editFirstStep, setEditFirstStep] = useState("");
   const [editNotes, setEditNotes] = useState("");
+  const [editTags, setEditTags] = useState<string[]>([]);
+  const [tagDraft, setTagDraft] = useState("");
+  const [editStage, setEditStage] = useState<string>("Idea");
   const [isUpdating, setIsUpdating] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saved" | "error">("idle");
 
@@ -76,6 +88,8 @@ export const ProjectStudio: React.FC<ProjectStudioProps> = ({
       setEditOneLiner(initialIdea.oneLiner || "");
       setEditFirstStep(initialIdea.firstStep || "");
       setEditNotes(initialIdea.notes || "");
+      setEditTags(Array.isArray(initialIdea.tags) ? initialIdea.tags : []);
+      setEditStage(initialIdea.stage || "Idea");
       setSaveStatus("idle");
       setPendingRefinedIdea(null);
       setIsRefiningOpen(false);
@@ -89,6 +103,8 @@ export const ProjectStudio: React.FC<ProjectStudioProps> = ({
     setIsEditing(false);
     setPendingRefinedIdea(null);
     setIsRefiningOpen(false);
+    setEditTags([]);
+    setEditStage("Idea");
     if (onClearInitialIdea) {
       onClearInitialIdea();
     }
@@ -114,6 +130,8 @@ export const ProjectStudio: React.FC<ProjectStudioProps> = ({
     setIsEditing(false);
     setPendingRefinedIdea(null);
     setIsRefiningOpen(false);
+    setEditTags([]);
+    setEditStage("Idea");
     if (onClearInitialIdea) {
       onClearInitialIdea();
     }
@@ -130,6 +148,15 @@ export const ProjectStudio: React.FC<ProjectStudioProps> = ({
       setLoading(false);
     }
   };
+
+  const addEditTag = () => {
+    const t = tagDraft.trim();
+    if (!t || editTags.length >= 8) { setTagDraft(""); return; }
+    if (editTags.some((x) => x.toLowerCase() === t.toLowerCase())) { setTagDraft(""); return; }
+    setEditTags((prev) => [...prev, t.slice(0, 24)]);
+    setTagDraft("");
+  };
+  const removeEditTag = (t: string) => setEditTags((prev) => prev.filter((x) => x !== t));
 
   const activeIdea = result || initialIdea;
 
@@ -170,6 +197,8 @@ export const ProjectStudio: React.FC<ProjectStudioProps> = ({
         oneLiner: editOneLiner.trim() || activeIdea?.oneLiner,
         firstStep: editFirstStep.trim() || activeIdea?.firstStep,
         notes: editNotes.trim(),
+        tags: editTags,
+        stage: editStage,
       };
 
       if (targetId && onUpdateIdea) {
@@ -448,6 +477,8 @@ export const ProjectStudio: React.FC<ProjectStudioProps> = ({
                     setEditOneLiner(activeIdea.oneLiner || "");
                     setEditFirstStep(activeIdea.firstStep || "");
                     setEditNotes(activeIdea.notes || "");
+                    setEditTags(Array.isArray(activeIdea.tags) ? activeIdea.tags : []);
+                    setEditStage(activeIdea.stage || "Idea");
                   }
                   setIsEditing((prev) => !prev);
                 }}
@@ -681,6 +712,42 @@ export const ProjectStudio: React.FC<ProjectStudioProps> = ({
                     placeholder="Personal notes, constraints, research links, implementation thoughts..."
                   />
                 </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-stone-700 mb-1">Completion Stage</label>
+                  <select
+                    id="studio-edit-stage"
+                    value={editStage}
+                    onChange={(e) => setEditStage(e.target.value)}
+                    className="w-full text-xs sm:text-sm p-2.5 rounded-xl border border-stone-300 bg-white text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-200 focus:border-amber-500"
+                  >
+                    {PROJECT_STAGES.map((s) => (<option key={s} value={s}>{s}</option>))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-stone-700 mb-1">Tags (max 8)</label>
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {editTags.map((t) => (
+                      <span key={t} className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-stone-100 text-stone-700 border border-stone-200">
+                        #{t}
+                        <button type="button" onClick={() => removeEditTag(t)} className="text-stone-400 hover:text-red-600">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))}
+                    {editTags.length === 0 && (<span className="text-[11px] text-stone-400">No tags yet</span>)}
+                  </div>
+                  <input
+                    id="studio-edit-tag-input"
+                    type="text"
+                    value={tagDraft}
+                    onChange={(e) => setTagDraft(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addEditTag(); } }}
+                    placeholder="Type a tag and press Enter…"
+                    className="w-full text-xs sm:text-sm p-2.5 rounded-xl border border-stone-300 bg-white text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-200 focus:border-amber-500"
+                  />
+                </div>
               </div>
 
               <div className="flex items-center justify-between pt-3 border-t border-stone-100">
@@ -693,6 +760,9 @@ export const ProjectStudio: React.FC<ProjectStudioProps> = ({
                     setEditOneLiner(activeIdea?.oneLiner || "");
                     setEditFirstStep(activeIdea?.firstStep || "");
                     setEditNotes(activeIdea?.notes || "");
+                    setEditTags(Array.isArray(activeIdea?.tags) ? activeIdea.tags : []);
+                    setEditStage(activeIdea?.stage || "Idea");
+                    setTagDraft("");
                   }}
                   className="px-3.5 py-2 rounded-xl border border-stone-300 bg-white text-stone-700 text-xs font-medium hover:bg-stone-50 transition cursor-pointer"
                 >
@@ -745,6 +815,21 @@ export const ProjectStudio: React.FC<ProjectStudioProps> = ({
                 <p className="text-sm sm:text-base text-stone-700 leading-relaxed pt-1">
                   {activeIdea.idea}
                 </p>
+              )}
+
+              {(activeIdea.stage || (activeIdea.tags && activeIdea.tags.length > 0)) && (
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  {activeIdea.stage && (
+                    <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${STAGE_STYLES[activeIdea.stage] || STAGE_STYLES.Idea}`}>
+                      {activeIdea.stage}
+                    </span>
+                  )}
+                  {activeIdea.tags?.map((t, i) => (
+                    <span key={i} className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-stone-100 text-stone-600 border border-stone-200">
+                      #{t}
+                    </span>
+                  ))}
+                </div>
               )}
             </div>
           )}

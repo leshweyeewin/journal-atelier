@@ -25,7 +25,8 @@ import {
 import { JournalInteraction } from "../types";
 
 interface DashboardViewProps {
-  entries: JournalInteraction[];
+  allEntries?: JournalInteraction[];
+  entries?: JournalInteraction[];
   onSelectEntry: (entry: JournalInteraction) => void;
   onNewEntry: () => void;
   isUnlocked?: boolean;
@@ -76,11 +77,28 @@ function getSentimentColor(tag: string): string {
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
-  entries,
+  allEntries: propAllEntries,
+  entries: propEntries,
   onSelectEntry,
   onNewEntry,
   isUnlocked = false,
 }) => {
+  const allEntries = useMemo(
+    () => propAllEntries || propEntries || [],
+    [propAllEntries, propEntries]
+  );
+  const entries = useMemo(
+    () => allEntries.filter((e) => !e.projectIdea),
+    [allEntries]
+  );
+
+  const entryCounts = useMemo(() => {
+    const total = allEntries.length;
+    const projects = allEntries.filter((e) => e.projectIdea).length;
+    const journals = total - projects;
+    return { total, projects, journals };
+  }, [allEntries]);
+
   const [timeframe, setTimeframe] = useState<"all" | "30d" | "7d">("all");
   const [selectedTagFilter, setSelectedTagFilter] = useState<string | null>(null);
   const [barChartScope, setBarChartScope] = useState<"month" | "all">("month");
@@ -291,6 +309,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <p className="text-xs sm:text-sm text-stone-500 mt-1 max-w-2xl">
             Visualizing your longitudinal emotional landscape and sentiment patterns synthesized by the Atelier's Sentiment Analyst across your private Firestore reflections.
           </p>
+          <div className="flex flex-wrap items-center gap-2 mt-3">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-stone-100 border border-stone-200/70 text-[11px] font-medium text-stone-700">
+              📓 {entryCounts.journals} journal {entryCounts.journals === 1 ? "reflection" : "reflections"}
+            </span>
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-50 border border-amber-200/70 text-[11px] font-medium text-amber-800">
+              ✨ {entryCounts.projects} project {entryCounts.projects === 1 ? "idea" : "ideas"}
+            </span>
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-stone-900 text-stone-50 text-[11px] font-medium">
+              {entryCounts.total} total {entryCounts.total === 1 ? "entry" : "entries"}
+            </span>
+          </div>
         </div>
 
         {/* Friendly Empty State */}
@@ -337,6 +366,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <p className="text-xs sm:text-sm text-stone-500 mt-1 max-w-2xl">
               Visualizing your longitudinal emotional landscape and sentiment patterns synthesized by the Atelier's Sentiment Analyst across your private Firestore reflections.
             </p>
+            <div className="flex flex-wrap items-center gap-2 mt-3">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-stone-100 border border-stone-200/70 text-[11px] font-medium text-stone-700">
+                📓 {entryCounts.journals} journal {entryCounts.journals === 1 ? "reflection" : "reflections"}
+              </span>
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-50 border border-amber-200/70 text-[11px] font-medium text-amber-800">
+                ✨ {entryCounts.projects} project {entryCounts.projects === 1 ? "idea" : "ideas"}
+              </span>
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-stone-900 text-stone-50 text-[11px] font-medium">
+                {entryCounts.total} total {entryCounts.total === 1 ? "entry" : "entries"}
+              </span>
+            </div>
           </div>
 
           {/* Timeframe selector buttons */}

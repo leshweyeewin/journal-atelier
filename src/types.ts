@@ -39,6 +39,8 @@ export interface ProjectIdea {
   risks?: string[];
   firstStep?: string;
   notes?: string;
+  tags?: string[];
+  stage?: string;
   modelUsed?: string;
 }
 
