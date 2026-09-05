@@ -5,7 +5,7 @@
 
 This document details the security posture and system design of Journal Atelier.
 For the adversarial prompt-injection & XSS verification scenarios see
-[SECURITY_WALKTHROUGH.md](../SECURITY_WALKTHROUGH.md); for setup and deployment see
+[SECURITY_WALKTHROUGH.md](./SECURITY_WALKTHROUGH.md); for setup and deployment see
 [DEPLOYMENT.md](./DEPLOYMENT.md); for the full walkthrough test matrix see
 [TESTING.md](./TESTING.md).
 

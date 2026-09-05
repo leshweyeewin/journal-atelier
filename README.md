@@ -22,6 +22,11 @@ box, the honest question is: *where does it go, who can read it, and what holds 
 Too many AI apps answer that question badly — shipping model keys to the browser, storing
 notes in a shared bucket, or quietly using private text as a training or command surface.
 
+But privacy is only half of the inspiration. The other half is what we *wished* a journal
+could do: not just hold one entry at a time, but show how a mood or a theme moves over
+weeks, and give the half-formed ideas that surface while reflecting somewhere to go. A
+private foundation is what made it safe to build those two ideas on top.
+
 **Journal Atelier** was built to prove the opposite is achievable on Google Cloud: an AI
 journal that is genuinely useful *and* genuinely private. Every design decision started
 from a threat model, not an afterthought — the Gemini key never leaves the server, every
@@ -29,6 +34,20 @@ entry is isolated to its owner's verified `uid`, model output is treated as untr
 the one feature people expect to be encrypted (the PIN lock) says honestly what it is and
 isn't. The result is a reflective companion — reflect, brainstorm, synthesize, and even
 ideate whole new AI projects — that a security reviewer can actually sign off on.
+
+Each of the three surfaces grew out of one of those motivations:
+
+- **Trends** — a single entry is only a snapshot, and the real payoff of journaling shows up
+  *longitudinally*. That gap is the inspiration: a dashboard that charts mood and recurring
+  themes over time, turning scattered entries into a picture you can actually see — computed
+  in the browser from your own data, so the insight never costs you privacy.
+- **Journal** — the core loop, a reflective companion that talks an entry through and, in one
+  click, synthesizes a title, mood, recurring themes, and a coaching question.
+- **AI Project Studio** — journaling and building so often start from the same half-formed
+  idea that we wanted a bridge between them. The inspiration: pursuing AI-project skills and
+  entering hackathons should begin right where you reflect — so the Studio turns a seed into
+  a novel project concept, refines it with Gemini, and exports a provider-agnostic build spec
+  you can carry straight into a build session.
 
 This project was created for the **Google Cloud GenAI Academy (APAC) Cohort 3 Ideathon
 Challenge**, showcasing Firebase, Firestore, Cloud Run, and Gemini working together under
@@ -98,7 +117,7 @@ Full setup, Secret Manager, Firestore rules, and Cloud Run deployment:
 | Doc | Contents |
 | :--- | :--- |
 | **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** | Security highlights, system architecture, and data-flow diagrams. |
-| **[SECURITY_WALKTHROUGH.md](SECURITY_WALKTHROUGH.md)** | Agentic threat model (5 zones), prompt-injection & XSS verification scenarios (PI-1 … PI-7), and PIN-lock verification (L-1 … L-8). |
+| **[docs/SECURITY_WALKTHROUGH.md](docs/SECURITY_WALKTHROUGH.md)** | Agentic threat model (5 zones), prompt-injection & XSS verification scenarios (PI-1 … PI-7), and PIN-lock verification (L-1 … L-8). |
 | **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** | Prerequisites, Secret Manager, Firestore rules, local dev, Cloud Run deploy, campaign labeling, Telegram setup. |
 | **[docs/TESTING.md](docs/TESTING.md)** | Full walkthrough test matrix (TC-01 … TC-49) covering every user interaction and security control. |
 
