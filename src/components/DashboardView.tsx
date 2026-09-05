@@ -18,6 +18,9 @@ import {
   Sparkles,
   Lock,
   ArrowUpRight,
+  Calendar,
+  X,
+  Filter,
 } from "lucide-react";
 import { JournalInteraction } from "../types";
 
@@ -80,6 +83,57 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 }) => {
   const [timeframe, setTimeframe] = useState<"all" | "30d" | "7d">("all");
   const [selectedTagFilter, setSelectedTagFilter] = useState<string | null>(null);
+  const [barChartScope, setBarChartScope] = useState<"month" | "all">("month");
+
+  // Dedicated Past Month (Past 30 Days) Mood Tag Frequency Data
+  const pastMonthMoodStats = useMemo(() => {
+    const now = Date.now();
+    const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
+
+    // Filter all entries created or updated within the past 30 days
+    const monthEntries = entries.filter((e) => {
+      const entryTime = e.createdAt || e.updatedAt || 0;
+      return now - entryTime <= thirtyDaysMs;
+    });
+
+    const moodCounts: Record<string, number> = {};
+    let totalMoodLogs = 0;
+
+    monthEntries.forEach((e) => {
+      const moodTag = (e.mood || e.sentiment?.tag || "").trim();
+      if (moodTag) {
+        moodCounts[moodTag] = (moodCounts[moodTag] || 0) + 1;
+        totalMoodLogs += 1;
+      }
+    });
+
+    const chartData = Object.entries(moodCounts).map(([mood, count]) => {
+      return {
+        mood,
+        tag: mood,
+        count,
+        percentage: totalMoodLogs > 0 ? Math.round((count / totalMoodLogs) * 100) : 0,
+        color: getSentimentColor(mood),
+        valence: getSentimentValence(mood),
+      };
+    });
+
+    // Sort descending by frequency count, then alphabetically
+    chartData.sort((a, b) => b.count - a.count || a.mood.localeCompare(b.mood));
+
+    let topMood: { mood: string; count: number } | null = null;
+    if (chartData.length > 0) {
+      topMood = { mood: chartData[0].mood, count: chartData[0].count };
+    }
+
+    return {
+      totalEntriesInMonth: monthEntries.length,
+      totalMoodLogs,
+      chartData,
+      topMood,
+      distinctMoodsCount: chartData.length,
+    };
+  }, [entries]);
 
   // Filter entries that have sentiment or mood tags, sorted chronologically ascending
   const analyzedEntries = useMemo(() => {
@@ -191,10 +245,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     });
   }, [analyzedEntries, isUnlocked]);
 
-  // Sentiment frequency distribution data for the BarChart
-  const distributionData = useMemo(() => {
+  // Overall frequency distribution data for the BarChart when in "all" scope
+  const allTimeDistributionData = useMemo(() => {
     const list = Object.entries(stats.tagCounts).map(([tag, count]) => {
       return {
+        mood: tag,
         tag,
         count,
         percentage: stats.totalAnalyzed > 0 ? Math.round((count / stats.totalAnalyzed) * 100) : 0,
@@ -204,17 +259,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     });
 
     // Sort descending by count, then by tag name
-    return list.sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
+    return list.sort((a, b) => b.count - a.count || a.mood.localeCompare(b.mood));
   }, [stats.tagCounts, stats.totalAnalyzed]);
+
+  // Active bar chart data depending on chosen scope (Past Month vs All Time)
+  const activeBarChartData = barChartScope === "month" ? pastMonthMoodStats.chartData : allTimeDistributionData;
 
   // Filtered entries for drill-down list
   const filteredList = useMemo(() => {
     if (!selectedTagFilter) return analyzedEntries;
-    return analyzedEntries.filter((e) => {
+    return entries.filter((e) => {
       const tag = e.sentiment?.tag || e.mood;
       return tag === selectedTagFilter;
     });
-  }, [analyzedEntries, selectedTagFilter]);
+  }, [analyzedEntries, entries, selectedTagFilter]);
 
   // Dedicated friendly empty state if the user has no entries yet
   if (entries.length === 0) {
@@ -553,74 +611,205 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </div>
             </div>
 
-            {/* Chart 2: Sentiment Distribution Frequency (Bar Chart) */}
-            <div className="lg:col-span-4 bg-white border border-stone-200/80 rounded-2xl p-5 sm:p-6 shadow-xs flex flex-col">
-              <div className="mb-3">
-                <h2 className="text-sm font-semibold text-stone-900">
-                  Sentiment Distribution
-                </h2>
-                <p className="text-xs text-stone-500">
-                  Frequency of emotional themes ({distributionData.length} distinct tags identified)
-                </p>
+            {/* Chart 2: Interactive Past-Month Mood Frequency (Bar Chart) */}
+            <div
+              id="past-month-mood-card"
+              className="lg:col-span-4 bg-white border border-stone-200/80 rounded-2xl p-5 sm:p-6 shadow-xs flex flex-col justify-between"
+            >
+              <div>
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <div>
+                    <h2 id="past-month-mood-heading" className="text-sm font-semibold text-stone-900 flex items-center gap-1.5">
+                      <BarChart3 className="w-4 h-4 text-amber-700 shrink-0" />
+                      <span>Past Month Mood Frequency</span>
+                    </h2>
+                    <p className="text-xs text-stone-500 mt-0.5">
+                      {barChartScope === "month"
+                        ? `Frequency of mood tags recorded over the past 30 days (${pastMonthMoodStats.chartData.length} distinct moods)`
+                        : `Frequency of mood tags recorded across all reflections (${allTimeDistributionData.length} distinct moods)`}
+                    </p>
+                  </div>
+
+                  {/* Scope Switcher: Past Month vs All Time */}
+                  <div className="flex items-center p-0.5 rounded-lg bg-stone-100 border border-stone-200/60 text-[10px] shrink-0">
+                    <button
+                      id="chart-scope-month-btn"
+                      type="button"
+                      onClick={() => setBarChartScope("month")}
+                      className={`px-2 py-0.5 rounded-md transition cursor-pointer ${
+                        barChartScope === "month"
+                          ? "bg-white text-stone-900 shadow-2xs font-semibold"
+                          : "text-stone-500 hover:text-stone-800"
+                      }`}
+                    >
+                      Past 30d
+                    </button>
+                    <button
+                      id="chart-scope-all-btn"
+                      type="button"
+                      onClick={() => setBarChartScope("all")}
+                      className={`px-2 py-0.5 rounded-md transition cursor-pointer ${
+                        barChartScope === "all"
+                          ? "bg-white text-stone-900 shadow-2xs font-semibold"
+                          : "text-stone-500 hover:text-stone-800"
+                      }`}
+                    >
+                      All Time
+                    </button>
+                  </div>
+                </div>
+
+                {/* BarChart Container or Empty State */}
+                {activeBarChartData.length === 0 ? (
+                  <div className="h-[230px] flex flex-col items-center justify-center text-center p-4 border border-dashed border-stone-200 rounded-xl my-2 bg-stone-50/50">
+                    <Calendar className="w-6 h-6 text-stone-400 mb-2" />
+                    <p className="text-xs font-semibold text-stone-700">
+                      {barChartScope === "month" ? "No mood tags in the past 30 days" : "No mood tags found"}
+                    </p>
+                    <p className="text-[11px] text-stone-500 mt-1 max-w-[200px] leading-relaxed">
+                      {barChartScope === "month"
+                        ? "Reflections written in the last 30 days with mood or sentiment tags will appear here."
+                        : "Start a reflection to analyze your emotional landscape."}
+                    </p>
+                  </div>
+                ) : (
+                  <div id="past-month-mood-barchart-container" className="h-[240px] w-full mt-2">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        id="past-month-mood-barchart"
+                        data={activeBarChartData}
+                        layout="vertical"
+                        margin={{ top: 5, right: 20, left: 25, bottom: 5 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" horizontal={false} />
+                        <XAxis
+                          type="number"
+                          allowDecimals={false}
+                          tick={{ fill: "#78716c", fontSize: 11 }}
+                          axisLine={{ stroke: "#e2e8f0" }}
+                          tickLine={false}
+                        />
+                        <YAxis
+                          dataKey="mood"
+                          type="category"
+                          tick={{ fill: "#44403c", fontSize: 11, fontWeight: 500 }}
+                          axisLine={false}
+                          tickLine={false}
+                          width={75}
+                        />
+                        <Tooltip
+                          cursor={{ fill: "rgba(245, 245, 244, 0.65)" }}
+                          content={({ active, payload }) => {
+                            if (active && payload && payload.length) {
+                              const item = payload[0].payload;
+                              return (
+                                <div className="bg-stone-900 text-stone-50 p-2.5 rounded-xl shadow-xl text-xs border border-stone-700 min-w-[170px]">
+                                  <div className="flex items-center justify-between gap-2 border-b border-stone-800 pb-1.5 mb-1.5">
+                                    <span className="font-semibold text-stone-100">{item.mood}</span>
+                                    <span
+                                      className="w-2.5 h-2.5 rounded-full shrink-0"
+                                      style={{ backgroundColor: item.color }}
+                                    />
+                                  </div>
+                                  <div className="space-y-1 text-stone-300">
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-stone-400">Frequency:</span>
+                                      <span className="font-mono font-semibold text-stone-100">
+                                        {item.count} {item.count === 1 ? "entry" : "entries"}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-stone-400">
+                                        {barChartScope === "month" ? "Month Share:" : "Overall Share:"}
+                                      </span>
+                                      <span className="font-mono text-stone-200">{item.percentage}%</span>
+                                    </div>
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-stone-400">Valence:</span>
+                                      <span className="font-mono text-stone-200">
+                                        {item.valence > 0 ? `+${item.valence}` : item.valence}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <div className="mt-2 pt-1 border-t border-stone-800 text-[10px] text-amber-300">
+                                    {selectedTagFilter === item.mood ? "Click to clear filter" : "Click bar to filter reflections"}
+                                  </div>
+                                </div>
+                              );
+                            }
+                            return null;
+                          }}
+                        />
+                        <Bar
+                          dataKey="count"
+                          radius={[0, 6, 6, 0]}
+                          onClick={(data: any) => {
+                            const clickedMood = data?.mood || data?.tag;
+                            if (clickedMood) {
+                              setSelectedTagFilter((prev) => (prev === clickedMood ? null : clickedMood));
+                            }
+                          }}
+                          className="cursor-pointer"
+                        >
+                          {activeBarChartData.map((entry, idx) => {
+                            const isSelected = selectedTagFilter === entry.mood;
+                            return (
+                              <Cell
+                                key={`bar-cell-${entry.mood}-${idx}`}
+                                fill={entry.color}
+                                opacity={selectedTagFilter && !isSelected ? 0.35 : 1}
+                                stroke={isSelected ? "#1c1917" : "none"}
+                                strokeWidth={isSelected ? 2 : 0}
+                                className="transition-all duration-200 cursor-pointer"
+                              />
+                            );
+                          })}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
               </div>
 
-              {/* BarChart Container */}
-              <div className="h-[250px] w-full mt-2">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={distributionData}
-                    layout="vertical"
-                    margin={{ top: 5, right: 20, left: 25, bottom: 5 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" horizontal={false} />
-                    <XAxis
-                      type="number"
-                      allowDecimals={false}
-                      tick={{ fill: "#78716c", fontSize: 11 }}
-                      axisLine={{ stroke: "#e2e8f0" }}
-                      tickLine={false}
-                    />
-                    <YAxis
-                      dataKey="tag"
-                      type="category"
-                      tick={{ fill: "#44403c", fontSize: 11, fontWeight: 500 }}
-                      axisLine={false}
-                      tickLine={false}
-                      width={70}
-                    />
-                    <Tooltip
-                      content={({ active, payload }) => {
-                        if (active && payload && payload.length) {
-                          const item = payload[0].payload;
-                          return (
-                            <div className="bg-stone-900 text-stone-50 p-2.5 rounded-xl shadow-lg text-xs border border-stone-700">
-                              <span className="font-semibold text-stone-200">{item.tag}</span>
-                              <div className="mt-1 space-y-0.5 text-stone-300">
-                                <div>Count: <span className="font-mono">{item.count}</span></div>
-                                <div>Share: <span className="font-mono">{item.percentage}%</span></div>
-                              </div>
-                            </div>
-                          );
-                        }
-                        return null;
-                      }}
-                    />
-                    <Bar dataKey="count" radius={[0, 6, 6, 0]}>
-                      {distributionData.map((entry, idx) => (
-                        <Cell key={`cell-${idx}`} fill={entry.color} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-
-              {/* Interactive Tag Pill Filters */}
+              {/* Card Footer: Quick Stats & Interactive Tag Filters */}
               <div className="mt-3 pt-3 border-t border-stone-100">
-                <span className="text-[11px] font-medium text-stone-400 block mb-2">
-                  Filter timeline by tag:
-                </span>
+                {/* Past Month summary stats line */}
+                {barChartScope === "month" && pastMonthMoodStats.totalMoodLogs > 0 && (
+                  <div className="mb-2.5 flex items-center justify-between text-[11px] text-stone-500">
+                    <span>
+                      <strong>{pastMonthMoodStats.totalMoodLogs}</strong> mood logs this month
+                    </span>
+                    {pastMonthMoodStats.topMood && (
+                      <span className="inline-flex items-center gap-1 font-medium text-stone-700">
+                        Top:{" "}
+                        <span
+                          className="w-1.5 h-1.5 rounded-full"
+                          style={{ backgroundColor: getSentimentColor(pastMonthMoodStats.topMood.mood) }}
+                        />
+                        {pastMonthMoodStats.topMood.mood} ({pastMonthMoodStats.topMood.count}x)
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {/* Filter chips */}
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[11px] font-medium text-stone-400">
+                    Filter timeline by mood:
+                  </span>
+                  {selectedTagFilter && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedTagFilter(null)}
+                      className="text-[10px] text-amber-800 hover:underline flex items-center gap-0.5 cursor-pointer font-medium"
+                    >
+                      <X className="w-3 h-3" /> Clear
+                    </button>
+                  )}
+                </div>
                 <div className="flex flex-wrap gap-1.5">
                   <button
+                    id="mood-filter-all-btn"
                     type="button"
                     onClick={() => setSelectedTagFilter(null)}
                     className={`px-2 py-0.5 rounded-md text-[11px] font-medium transition cursor-pointer ${
@@ -629,29 +818,31 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         : "bg-stone-100 text-stone-600 hover:bg-stone-200"
                     }`}
                   >
-                    All ({analyzedEntries.length})
+                    All ({barChartScope === "month" ? pastMonthMoodStats.totalEntriesInMonth : analyzedEntries.length})
                   </button>
-                  {distributionData.map((item) => (
-                    <button
-                      key={`filter-${item.tag}`}
-                      type="button"
-                      onClick={() =>
-                        setSelectedTagFilter(selectedTagFilter === item.tag ? null : item.tag)
-                      }
-                      className={`px-2 py-0.5 rounded-md text-[11px] font-medium transition cursor-pointer flex items-center gap-1 ${
-                        selectedTagFilter === item.tag
-                          ? "bg-stone-900 text-stone-50"
-                          : "bg-stone-100 text-stone-700 hover:bg-stone-200"
-                      }`}
-                    >
-                      <span
-                        className="w-1.5 h-1.5 rounded-full shrink-0"
-                        style={{ backgroundColor: item.color }}
-                      />
-                      <span>{item.tag}</span>
-                      <span className="text-[10px] opacity-70">({item.count})</span>
-                    </button>
-                  ))}
+                  {activeBarChartData.map((item) => {
+                    const isSelected = selectedTagFilter === item.mood;
+                    return (
+                      <button
+                        key={`filter-${item.mood}`}
+                        id={`mood-filter-btn-${item.mood.toLowerCase()}`}
+                        type="button"
+                        onClick={() => setSelectedTagFilter(isSelected ? null : item.mood)}
+                        className={`px-2 py-0.5 rounded-md text-[11px] font-medium transition cursor-pointer flex items-center gap-1 ${
+                          isSelected
+                            ? "bg-stone-900 text-stone-50 ring-1 ring-stone-900"
+                            : "bg-stone-100 text-stone-700 hover:bg-stone-200"
+                        }`}
+                      >
+                        <span
+                          className="w-1.5 h-1.5 rounded-full shrink-0"
+                          style={{ backgroundColor: item.color }}
+                        />
+                        <span>{item.mood}</span>
+                        <span className="text-[10px] opacity-70">({item.count})</span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -685,81 +876,96 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               )}
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {filteredList.map((entry) => {
-                const tag = entry.sentiment?.tag || entry.mood || "Reflective";
-                const color = getSentimentColor(tag);
-                const confidence =
-                  typeof entry.sentiment?.confidence === "number"
-                    ? Math.round(entry.sentiment.confidence * 100)
-                    : null;
-                const isMasked = Boolean(entry.locked && !isUnlocked);
-                const dateStr = new Date(entry.createdAt || entry.updatedAt || Date.now()).toLocaleDateString(
-                  undefined,
-                  {
-                    month: "short",
-                    day: "numeric",
-                    year: "numeric",
-                  }
-                );
+            {filteredList.length === 0 ? (
+              <div className="text-center py-8 px-4 border border-dashed border-stone-200 rounded-xl bg-stone-50/50">
+                <p className="text-xs text-stone-500 font-medium">
+                  No reflections found matching mood "{selectedTagFilter}".
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setSelectedTagFilter(null)}
+                  className="mt-2 text-xs text-amber-800 underline font-medium cursor-pointer"
+                >
+                  Show all reflections
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {filteredList.map((entry) => {
+                  const tag = entry.sentiment?.tag || entry.mood || "Reflective";
+                  const color = getSentimentColor(tag);
+                  const confidence =
+                    typeof entry.sentiment?.confidence === "number"
+                      ? Math.round(entry.sentiment.confidence * 100)
+                      : null;
+                  const isMasked = Boolean(entry.locked && !isUnlocked);
+                  const dateStr = new Date(entry.createdAt || entry.updatedAt || Date.now()).toLocaleDateString(
+                    undefined,
+                    {
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric",
+                    }
+                  );
 
-                return (
-                  <div
-                    key={entry.id}
-                    id={`dash-entry-${entry.id}`}
-                    onClick={() => onSelectEntry(entry)}
-                    className="p-4 rounded-xl border border-stone-200/80 bg-stone-50/50 hover:bg-stone-50 hover:border-stone-300 transition cursor-pointer flex flex-col justify-between group shadow-2xs"
-                  >
-                    <div>
-                      <div className="flex items-center justify-between gap-2 mb-1.5">
-                        <span
-                          className="text-[11px] font-medium px-2 py-0.5 rounded-full inline-flex items-center gap-1.5"
-                          style={{
-                            backgroundColor: `${color}18`,
-                            color: color,
-                          }}
-                        >
+                  return (
+                    <div
+                      key={entry.id}
+                      id={`dash-entry-${entry.id}`}
+                      onClick={() => onSelectEntry(entry)}
+                      className="p-4 rounded-xl border border-stone-200/80 bg-stone-50/50 hover:bg-stone-50 hover:border-stone-300 transition cursor-pointer flex flex-col justify-between group shadow-2xs"
+                    >
+                      <div>
+                        <div className="flex items-center justify-between gap-2 mb-1.5">
                           <span
-                            className="w-1.5 h-1.5 rounded-full shrink-0"
-                            style={{ backgroundColor: color }}
-                          />
-                          {tag}
-                        </span>
+                            className="text-[11px] font-medium px-2 py-0.5 rounded-full inline-flex items-center gap-1.5"
+                            style={{
+                              backgroundColor: `${color}18`,
+                              color: color,
+                            }}
+                          >
+                            <span
+                              className="w-1.5 h-1.5 rounded-full shrink-0"
+                              style={{ backgroundColor: color }}
+                            />
+                            {tag}
+                          </span>
 
-                        <div className="flex items-center gap-1.5 text-stone-400">
-                          {entry.locked && (
-                            <span title="Locked entry" className="inline-flex">
-                              <Lock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                            </span>
-                          )}
-                          <span className="text-[11px] font-mono">{dateStr}</span>
+                          <div className="flex items-center gap-1.5 text-stone-400">
+                            {entry.locked && (
+                              <span title="Locked entry" className="inline-flex">
+                                <Lock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                              </span>
+                            )}
+                            <span className="text-[11px] font-mono">{dateStr}</span>
+                          </div>
                         </div>
+
+                        <h4 className="text-xs sm:text-sm font-semibold text-stone-900 group-hover:text-stone-800 transition line-clamp-1">
+                          {entry.title || "Untitled Reflection"}
+                        </h4>
+
+                        {/* Display reflective excerpt or masked privacy notice */}
+                        <p className="text-xs text-stone-500 mt-1 line-clamp-2 leading-relaxed">
+                          {isMasked
+                            ? "🔒 Text hidden — enter PIN to review full reflection"
+                            : entry.reflection || entry.summary || entry.content || "No excerpt"}
+                        </p>
                       </div>
 
-                      <h4 className="text-xs sm:text-sm font-semibold text-stone-900 group-hover:text-stone-800 transition line-clamp-1">
-                        {entry.title || "Untitled Reflection"}
-                      </h4>
-
-                      {/* Display reflective excerpt or masked privacy notice */}
-                      <p className="text-xs text-stone-500 mt-1 line-clamp-2 leading-relaxed">
-                        {isMasked
-                          ? "🔒 Text hidden — enter PIN to review full reflection"
-                          : entry.reflection || entry.summary || entry.content || "No excerpt"}
-                      </p>
+                      <div className="mt-3 pt-2.5 border-t border-stone-200/60 flex items-center justify-between text-[11px]">
+                        <span className="text-stone-400">
+                          {confidence !== null ? `${confidence}% analyst confidence` : "Synthesized"}
+                        </span>
+                        <span className="text-stone-700 font-medium inline-flex items-center gap-0.5 group-hover:translate-x-0.5 transition">
+                          Open <ArrowUpRight className="w-3 h-3" />
+                        </span>
+                      </div>
                     </div>
-
-                    <div className="mt-3 pt-2.5 border-t border-stone-200/60 flex items-center justify-between text-[11px]">
-                      <span className="text-stone-400">
-                        {confidence !== null ? `${confidence}% analyst confidence` : "Synthesized"}
-                      </span>
-                      <span className="text-stone-700 font-medium inline-flex items-center gap-0.5 group-hover:translate-x-0.5 transition">
-                        Open <ArrowUpRight className="w-3 h-3" />
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </>
       )}
