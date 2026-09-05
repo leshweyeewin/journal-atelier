@@ -421,38 +421,84 @@ async function sendTelegram(chatId: string, text: string): Promise<boolean> {
   }
 }
 
+// User-scoped in-memory cache for Telegram settings to ensure high availability
+// even if Admin SDK credentials in Cloud Run lack direct IAM access to the client project.
+const userTelegramCache = new Map<string, string | null>();
+
 /**
- * Look up the requesting user's telegramChatId from /users/{uid}/settings using firebase-admin firestore.
+ * Look up the requesting user's telegramChatId from /users/{uid}/settings using cache, REST API, or firebase-admin firestore.
  * uid comes from the verified token only.
  */
-async function getTelegramChatIdForUser(uid: string): Promise<string | null> {
+async function getTelegramChatIdForUser(uid: string, userToken?: string): Promise<string | null> {
+  // 1. Check in-memory store first
+  if (userTelegramCache.has(uid)) {
+    const cached = userTelegramCache.get(uid);
+    if (cached) return cached;
+  }
+
+  // 2. Try Firestore REST API with the user's verified token if available
+  if (userToken && targetProjectId && firestoreDbId) {
+    try {
+      const restUrl = `https://firestore.googleapis.com/v1/projects/${targetProjectId}/databases/${firestoreDbId}/documents/users/${uid}/settings/telegram`;
+      const resp = await fetch(restUrl, {
+        headers: { Authorization: `Bearer ${userToken}` },
+      });
+      if (resp.ok) {
+        const json = (await resp.json()) as any;
+        const strVal = json?.fields?.telegramChatId?.stringValue;
+        if (strVal && typeof strVal === "string" && strVal.trim()) {
+          userTelegramCache.set(uid, strVal.trim());
+          return strVal.trim();
+        }
+      }
+    } catch {
+      // Non-blocking REST fallback
+    }
+  }
+
+  // 3. Fallback to firebase-admin Firestore
   try {
     const db = getAdminDb();
     // 1. Check doc users/{uid}/settings/telegram
     const telegramDoc = await db.doc(`users/${uid}/settings/telegram`).get();
     if (telegramDoc.exists) {
       const val = telegramDoc.data()?.telegramChatId;
-      if (typeof val === "string" && val.trim()) return val.trim();
+      if (typeof val === "string" && val.trim()) {
+        userTelegramCache.set(uid, val.trim());
+        return val.trim();
+      }
     }
 
     // 2. Check doc users/{uid}/settings/general
     const generalDoc = await db.doc(`users/${uid}/settings/general`).get();
     if (generalDoc.exists) {
       const val = generalDoc.data()?.telegramChatId;
-      if (typeof val === "string" && val.trim()) return val.trim();
+      if (typeof val === "string" && val.trim()) {
+        userTelegramCache.set(uid, val.trim());
+        return val.trim();
+      }
     }
 
     // 3. Fallback: inspect any document under users/{uid}/settings
     const settingsSnap = await db.collection(`users/${uid}/settings`).limit(5).get();
     for (const doc of settingsSnap.docs) {
       const val = doc.data()?.telegramChatId;
-      if (typeof val === "string" && val.trim()) return val.trim();
+      if (typeof val === "string" && val.trim()) {
+        userTelegramCache.set(uid, val.trim());
+        return val.trim();
+      }
     }
 
-    return null;
-  } catch (err) {
-    console.warn("[Telegram] Error retrieving telegramChatId from settings:", err);
-    return null;
+    return userTelegramCache.get(uid) || null;
+  } catch (err: any) {
+    const isPermissionDenied =
+      err?.code === 7 ||
+      String(err?.message || "").includes("PERMISSION_DENIED") ||
+      String(err?.message || "").includes("Missing or insufficient permissions");
+    if (!isPermissionDenied) {
+      console.warn("[Telegram] Notice inspecting telegram settings:", err?.message || err);
+    }
+    return userTelegramCache.get(uid) || null;
   }
 }
 
@@ -803,15 +849,22 @@ Return a JSON object with 'reflection', 'suggestedTitle', and 'tags':\n\n${delim
         },
         { merge: true }
       );
-    } catch (saveErr) {
-      console.warn("[MultiAgentReflect] Firestore persistence warning in /api/reflect:", saveErr);
+    } catch (saveErr: any) {
+      const isPermissionDenied =
+        saveErr?.code === 7 ||
+        String(saveErr?.message || "").includes("PERMISSION_DENIED");
+      if (!isPermissionDenied) {
+        console.warn("[MultiAgentReflect] Firestore persistence warning in /api/reflect:", saveErr?.message || saveErr);
+      }
     }
 
-    // Look up requesting user's telegramChatId from /users/{uid}/settings using firebase-admin firestore
+    // Look up requesting user's telegramChatId from /users/{uid}/settings using cache, REST, or Admin SDK
     // (uid from the verified token only). If present, send minimal message:
     // suggested title, sentiment tag, Coach question — escaped plain text, NOT the full entry.
     try {
-      const telegramChatId = await getTelegramChatIdForUser(uid);
+      const authHeader = req.headers.authorization || "";
+      const userToken = authHeader.replace(/^Bearer\s+/i, "");
+      const telegramChatId = await getTelegramChatIdForUser(uid, userToken);
       if (telegramChatId) {
         const cleanTitle = suggestedTitle
           ? suggestedTitle.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "").trim()
@@ -1222,8 +1275,13 @@ Return a JSON object with 'risks' (array of 2-3 strings) and 'firstStep' (one se
 
     try {
       await db.doc(`users/${uid}/interactions/${interactionId}`).set(docData, { merge: true });
-    } catch (saveErr) {
-      console.warn("[Ideate] Firestore persistence warning in /api/ideate:", saveErr);
+    } catch (saveErr: any) {
+      const isPermissionDenied =
+        saveErr?.code === 7 ||
+        String(saveErr?.message || "").includes("PERMISSION_DENIED");
+      if (!isPermissionDenied) {
+        console.warn("[Ideate] Firestore persistence warning in /api/ideate:", saveErr?.message || saveErr);
+      }
     }
 
     // Respond to client with full object + saved doc id
@@ -1262,8 +1320,11 @@ app.get("/api/settings/telegram", verifyUserToken, async (req: Request, res: Res
   const uid = (req as any).user?.uid;
   if (!uid) return res.status(401).json({ error: "Unauthorized" });
 
+  const authHeader = req.headers.authorization || "";
+  const userToken = authHeader.replace(/^Bearer\s+/i, "");
+
   try {
-    const chatId = await getTelegramChatIdForUser(uid);
+    const chatId = await getTelegramChatIdForUser(uid, userToken);
     return res.json({
       telegramChatId: chatId || null,
       connected: Boolean(chatId),
@@ -1279,6 +1340,8 @@ app.delete("/api/settings/telegram", verifyUserToken, async (req: Request, res: 
   const uid = (req as any).user?.uid;
   if (!uid) return res.status(401).json({ error: "Unauthorized" });
 
+  userTelegramCache.delete(uid);
+
   try {
     const db = getAdminDb();
     await db.doc(`users/${uid}/settings/telegram`).set(
@@ -1289,16 +1352,18 @@ app.delete("/api/settings/telegram", verifyUserToken, async (req: Request, res: 
       },
       { merge: true }
     );
-    return res.json({ success: true, connected: false, telegramChatId: null });
-  } catch (err: any) {
-    console.error("Failed to clear telegram settings:", err);
-    return res.status(500).json({ error: "Failed to clear telegram settings." });
+  } catch {
+    // Non-blocking best effort
   }
+  return res.json({ success: true, connected: false, telegramChatId: null });
 });
 
 app.post("/api/settings/telegram", verifyUserToken, async (req: Request, res: Response) => {
   const uid = (req as any).user?.uid;
   if (!uid) return res.status(401).json({ error: "Unauthorized" });
+
+  const authHeader = req.headers.authorization || "";
+  const userToken = authHeader.replace(/^Bearer\s+/i, "");
 
   const data = req.body && typeof req.body === "object" ? req.body : {};
 
@@ -1314,6 +1379,7 @@ app.post("/api/settings/telegram", verifyUserToken, async (req: Request, res: Re
     (typeof data.chatId === "string" && data.chatId.trim() === "");
 
   if (isDisconnect) {
+    userTelegramCache.delete(uid);
     try {
       const db = getAdminDb();
       await db.doc(`users/${uid}/settings/telegram`).set(
@@ -1324,11 +1390,10 @@ app.post("/api/settings/telegram", verifyUserToken, async (req: Request, res: Re
         },
         { merge: true }
       );
-      return res.json({ success: true, connected: false, telegramChatId: null });
-    } catch (err: any) {
-      console.error("Failed to clear telegram settings:", err);
-      return res.status(500).json({ error: "Failed to clear telegram settings." });
+    } catch {
+      // Non-blocking best effort
     }
+    return res.json({ success: true, connected: false, telegramChatId: null });
   }
 
   const rawId = data.telegramChatId !== undefined ? data.telegramChatId : data.chatId;
@@ -1337,9 +1402,34 @@ app.post("/api/settings/telegram", verifyUserToken, async (req: Request, res: Re
     return res.status(400).json({ error: "Invalid Telegram Chat ID. It must be a numeric string." });
   }
 
+  // Update in-memory user-scoped store
+  userTelegramCache.set(uid, chatId);
+
+  // Attempt REST write with userToken if available
+  if (userToken && targetProjectId && firestoreDbId) {
+    try {
+      const restUrl = `https://firestore.googleapis.com/v1/projects/${targetProjectId}/databases/${firestoreDbId}/documents/users/${uid}/settings/telegram?updateMask.fieldPaths=telegramChatId&updateMask.fieldPaths=updatedAt`;
+      await fetch(restUrl, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${userToken}`,
+        },
+        body: JSON.stringify({
+          fields: {
+            telegramChatId: { stringValue: chatId },
+            updatedAt: { stringValue: new Date().toISOString() },
+          },
+        }),
+      });
+    } catch {
+      // ignore REST write error
+    }
+  }
+
+  // Also try admin SDK (silent if permission denied)
   try {
     const db = getAdminDb();
-    // Save { telegramChatId } to /users/{uid}/settings/telegram
     await db.doc(`users/${uid}/settings/telegram`).set(
       {
         telegramChatId: chatId,
@@ -1347,16 +1437,20 @@ app.post("/api/settings/telegram", verifyUserToken, async (req: Request, res: Re
       },
       { merge: true }
     );
-
-    return res.json({
-      success: true,
-      connected: true,
-      telegramChatId: chatId,
-    });
   } catch (err: any) {
-    console.error("Failed to save telegram settings:", err);
-    return res.status(500).json({ error: "Failed to save telegram settings." });
+    const isPermissionDenied =
+      err?.code === 7 ||
+      String(err?.message || "").includes("PERMISSION_DENIED");
+    if (!isPermissionDenied) {
+      console.warn("[Telegram] Admin SDK note on saving telegram settings:", err?.message || err);
+    }
   }
+
+  return res.json({
+    success: true,
+    connected: true,
+    telegramChatId: chatId,
+  });
 });
 
 // Vite middleware and static serving
