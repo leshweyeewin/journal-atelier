@@ -103,7 +103,8 @@ export const ProjectStudio: React.FC = () => {
             <button
               id="studio-generate-btn"
               type="button"
-              disabled={loading}
+              disabled={loading || !seed.trim()}
+              title={!seed.trim() ? "Enter a seed idea, or hit Surprise Me for a random one" : "Generate an idea from your seed"}
               onClick={() => handleGenerate(seed)}
               className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-stone-900 text-stone-50 text-xs sm:text-sm font-medium hover:bg-stone-800 active:scale-[0.98] transition shadow-xs disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
             >
@@ -126,6 +127,12 @@ export const ProjectStudio: React.FC = () => {
               <span>Surprise Me</span>
             </button>
           </div>
+
+          {!seed.trim() && !loading && (
+            <p className="text-[11px] text-stone-400">
+              Type a theme above to shape the idea, or hit <span className="font-medium text-amber-700">Surprise Me</span> for a random one.
+            </p>
+          )}
 
           {/* Loading Indicator */}
           {loading && (
