@@ -7,8 +7,7 @@ and stored with strict per-user isolation.
 Built **security-first** on Firebase Authentication, Cloud Firestore, Google Cloud Run,
 and **Gemini 3.6 Flash** — with the API key held server-side at all times.
 
-- 🔗 **Live prototype:** https://journal-atelier.ai.studio/
-- 💻 **Source:** https://github.com/leshweyeewin/journal-atelier
+🔗 **Live prototype:** https://journal-atelier.ai.studio/
 
 > Built for the **Google Cloud GenAI Academy (APAC) — Cohort 3 · Ideathon Challenge**.
 > `#AccelerateAIwithCloudRun`
@@ -95,7 +94,6 @@ Full setup, Secret Manager, Firestore rules, and Cloud Run deployment:
 | **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** | Security highlights, system architecture, and data-flow diagrams. |
 | **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** | Prerequisites, Secret Manager, Firestore rules, local dev, Cloud Run deploy, campaign labeling, Telegram setup. |
 | **[docs/TESTING.md](docs/TESTING.md)** | Full walkthrough test matrix (TC-01 … TC-41) covering every user interaction and security control. |
-| **[CLAUDE.md](CLAUDE.md)** | Project constitution — the security directives every change is held to. |
 
 ---
 
