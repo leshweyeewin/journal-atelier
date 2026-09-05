@@ -31,7 +31,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 }) => {
   return (
     <header className="w-full bg-white border-b border-stone-200 sticky top-0 z-30 shadow-xs">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+      <div className="w-full max-w-[1700px] mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
         {/* Left branding and Navigation Toggle */}
         <div className="flex items-center gap-3 sm:gap-5">
           <div className="flex items-center gap-3">

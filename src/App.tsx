@@ -766,7 +766,7 @@ export default function App() {
       />
 
       {/* Main App Layout */}
-      <div className="flex-1 flex flex-col md:flex-row max-w-7xl w-full mx-auto">
+      <div className="flex-1 flex flex-col md:flex-row w-full max-w-[1700px] mx-auto px-2 sm:px-4 lg:px-6">
         {/* Left Sidebar: Isolated User Reflections History */}
         <HistorySidebar
           entries={interactions}
