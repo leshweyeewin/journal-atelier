@@ -42,9 +42,10 @@ a strict, verifiable security posture.
 | :--- | :--- |
 | ✍️ **Reflect & Brainstorm** | Write journal entries and talk them through with Gemini over multi-turn, context-preserving chat. |
 | 🧠 **Multi-agent Synthesize** | One click routes an entry through four specialist agents — Reflection, Sentiment, Pattern, Coach — for a title, mood, recurring themes drawn from *your own* history, and a coaching question. |
-| 💡 **AI Project Studio** | Generate novel AI project concepts from a seed (or "Surprise Me"), save them to history, and export a **provider-agnostic Markdown build spec** you can hand to Gemini, Claude, OpenAI, or a local Ollama model. |
+| 📈 **Mood & Sentiment Trends** | A Trends dashboard charts your emotional valence over time and mood frequency (past-30-days / all-time), with click-to-filter drill-down — computed entirely in-browser from your own entries. |
+| 💡 **AI Project Studio** | Generate novel AI project concepts from a seed (or "Surprise Me"), **refine** them with Gemini, save them to history, and export a **provider-agnostic Markdown build spec** you can hand to Gemini, Claude, OpenAI, or a local Ollama model. |
 | 🔒 **Personal PIN lock** | Screen-privacy layer for individual entries, backed by a browser-derived PBKDF2-SHA256 hash — honest about being privacy, not encryption. |
-| 📲 **Telegram alerts** | Optional outbound-only push of a reflection's title, mood, and coaching question — never the raw journal text. |
+| 📲 **Telegram alerts** | Optional outbound-only push on synthesis, saved ideas, and an on-demand weekly digest — summary metadata only, never the raw journal text. |
 
 ## Security posture (at a glance)
 
@@ -53,7 +54,10 @@ a strict, verifiable security posture.
 - **Verified identity at every boundary** — Firebase Admin `verifyIdToken` on each API call.
 - **Owner-bound data isolation** — Firestore rules enforce `request.auth.uid == userId`.
 - **Untrusted model I/O** — user seeds and entries are wrapped as data, never instructions
-  (OWASP LLM01); reference links come only from a server-side allowlist (LLM05).
+  (OWASP LLM01); reference links come only from a server-side allowlist, and AI markdown is
+  sanitized (dangerous elements + `javascript:`/`data:` URLs stripped) before render (LLM05 / A03).
+- **Outbound-only notifications** — every Telegram push (including the weekly digest) sends
+  summary metadata only; no raw entries, messages, or locked content ever leave the server.
 - **Zero hardcoded secrets** — no keys, tokens, or service-account files in the repo.
 
 Full details: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
@@ -69,7 +73,8 @@ Full details: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 | AI engine | Gemini 3.6 Flash (`@google/genai`) | Generates replies and summarizes entries, with a resilient model fallback ladder. |
 | Secret management | Google Cloud Secret Manager | Stores the Gemini API key; retrieved server-side only. |
 | Runtime / deploy | Google Cloud Run | Server-side runtime; keys injected from Secret Manager. |
-| Frontend | React + Vite + TypeScript | Editor, chat, Project Studio, history sidebar. |
+| Frontend | React + Vite + TypeScript | Editor, chat, Project Studio, Trends dashboard, history sidebar. |
+| Charts | Recharts | Client-side mood/sentiment visualizations on the Trends dashboard. |
 
 ---
 
@@ -92,8 +97,9 @@ Full setup, Secret Manager, Firestore rules, and Cloud Run deployment:
 | Doc | Contents |
 | :--- | :--- |
 | **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** | Security highlights, system architecture, and data-flow diagrams. |
+| **[docs/SECURITY_WALKTHROUGH.md](docs/SECURITY_WALKTHROUGH.md)** | Prompt-injection & XSS verification scenarios (PI-1 … PI-7) with expected safe outcomes. |
 | **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** | Prerequisites, Secret Manager, Firestore rules, local dev, Cloud Run deploy, campaign labeling, Telegram setup. |
-| **[docs/TESTING.md](docs/TESTING.md)** | Full walkthrough test matrix (TC-01 … TC-41) covering every user interaction and security control. |
+| **[docs/TESTING.md](docs/TESTING.md)** | Full walkthrough test matrix (TC-01 … TC-48) covering every user interaction and security control. |
 
 ---
 

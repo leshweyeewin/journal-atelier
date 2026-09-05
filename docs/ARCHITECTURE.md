@@ -4,8 +4,10 @@
 > The browser only ever holds a Firebase **ID token** — never the Gemini API key.
 
 This document details the security posture and system design of Journal Atelier.
-For setup and deployment see [DEPLOYMENT.md](./DEPLOYMENT.md); for the full
-walkthrough test matrix see [TESTING.md](./TESTING.md).
+For the adversarial prompt-injection & XSS verification scenarios see
+[SECURITY_WALKTHROUGH.md](./SECURITY_WALKTHROUGH.md); for setup and deployment see
+[DEPLOYMENT.md](./DEPLOYMENT.md); for the full walkthrough test matrix see
+[TESTING.md](./TESTING.md).
 
 ---
 
@@ -58,12 +60,21 @@ runtime. No key ever reaches client code, committed config, or the repository.
   agent's failure degrades gracefully without failing the run.
 
 ### 6. Outbound-only Telegram notifications
-- Optional real-time push notifications to the user's Telegram chat on reflection synthesis.
+- Optional real-time push notifications to the user's Telegram chat, across three triggers:
+  reflection synthesis, a saved project idea (`/api/notify/project-saved`), and an on-demand
+  weekly digest (`/api/notify/weekly-digest`).
 - **Outbound-only & closed-loop**: no inbound webhooks, bot commands, or polling.
 - Destination host is strictly hardcoded to
   `https://api.telegram.org/bot<token>/sendMessage` (SSRF prevention).
-- Minimal payload: sends only the suggested title, sentiment tag, and Coach question
-  (plain text, escaped) — never the full raw journal text.
+- **Minimal, summary-only payloads.** Reflection pushes send only the suggested title,
+  sentiment tag, and Coach question. Project-saved sends only title, one-liner, and first
+  step. The weekly digest sends only aggregate metadata for the last 7 days — entry count,
+  mood tally, top themes, and up to 5 titles. **No raw journal text, conversation messages,
+  reflection bodies, or locked-entry content is ever transmitted.** Every field passes
+  through `sanitizeTelegramField` (escaped, length-capped).
+- The digest reads the user's own history bound to the token-derived `uid` only, and the
+  whole path is best-effort: every notification is wrapped in try/catch and returns success
+  even when Telegram is unconfigured, so it can never block or fail a reflection.
 - `TELEGRAM_BOT_TOKEN` is maintained server-side via Secret Manager; chat IDs are stored
   isolated at `/users/{uid}/settings/telegram`.
 
@@ -85,6 +96,11 @@ runtime. No key ever reaches client code, committed config, or the repository.
 - Generated ideas can be **saved to history** (as a `brainstorm` interaction) and exported
   as a **provider-agnostic Markdown build spec** (Download or Copy). The spec is composed
   strictly from idea-derived fields and contains zero secrets, keys, or credentials.
+- A saved idea can be **refined** (`/api/ideate/refine`) with a free-text instruction. Both
+  the existing idea and the refinement instruction are wrapped in `<user_content>` delimiters
+  and treated purely as data to improve — never as commands (OWASP LLM01) — and the refined
+  result is re-validated against the same capability allowlist before it is written back to
+  the **same** Firestore document.
 
 ### 8. Personal PIN privacy lock
 - Users can lock individual entries behind a personal 4–6 digit PIN. While the session is
@@ -107,6 +123,24 @@ runtime. No key ever reaches client code, committed config, or the repository.
   sidebar search, so no keyword, mood, or tag can leak via substring match. Unlock state is
   held **in memory only** and re-locks automatically on page reload or sign-out.
 
+### 9. Output sanitization & XSS defense (OWASP A03 / LLM05)
+- Model output is treated as untrusted before it reaches the DOM. AI replies render through
+  `react-markdown` in `ChatStream.tsx` with `disallowedElements` stripping `script`,
+  `iframe`, `object`, `embed`, `style`, `form`, and `input`, and a `urlTransform` that blanks
+  any `javascript:`, `data:`, or `vbscript:` URL.
+- No component uses `dangerouslySetInnerHTML`; capability/reference links are additionally
+  gated to `https://` and rendered with `rel="noopener noreferrer"`. A malicious or
+  hallucinated payload therefore cannot execute script or inject an active element.
+
+### 10. Mood & Sentiment Trends (client-side, no new exposure)
+- The **Trends** dashboard visualizes the signed-in user's emotional landscape — an emotional
+  valence timeline, an interactive mood-frequency bar chart, and drill-down cards — using
+  `recharts`.
+- All aggregation (valence mapping, coverage, confidence, mood tallies) is computed in the
+  browser from the entries already loaded for that user; the dashboard adds **no new endpoint
+  and reads no additional data**. Locked entries stay masked in every chart tooltip and card
+  while the session is locked.
+
 ---
 
 ## Diagrams
@@ -127,7 +161,7 @@ flowchart TB
         Auth["Firebase Authentication<br/>Google Sign-In (federated)"]
         subgraph Run["Cloud Run — Express (server.ts)"]
             Verify["verifyUserToken<br/>Firebase Admin verifyIdToken"]
-            Endpoints["/api/chat · /api/reflect<br/>/api/ideate · /api/summarize<br/>/api/settings/telegram"]
+            Endpoints["/api/chat · /api/reflect · /api/summarize<br/>/api/ideate · /api/ideate/refine<br/>/api/notify/* · /api/settings/telegram"]
             Ladder["generateContentWithFallback<br/>resilient model fallback ladder"]
         end
         Secret["Secret Manager<br/>GEMINI_API_KEY · TELEGRAM_BOT_TOKEN"]
