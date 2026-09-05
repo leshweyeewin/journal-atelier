@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Sparkles, Lightbulb, Save, CheckCircle2, Tag, Plus, X } from "lucide-react";
+import { Sparkles, Lightbulb, Save, CheckCircle2, Tag, Plus, X, Lock } from "lucide-react";
 import { ReflectionMode } from "../types";
 
 interface JournalEditorProps {
@@ -20,6 +20,8 @@ interface JournalEditorProps {
   isAiReflecting: boolean;
   isAiSummarizing: boolean;
   lastSavedAt: number | null;
+  isLockedMasked?: boolean;
+  onRequestUnlock?: () => void;
 }
 
 const REFLECT_STARTERS = [
@@ -54,6 +56,8 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
   isAiReflecting,
   isAiSummarizing,
   lastSavedAt,
+  isLockedMasked = false,
+  onRequestUnlock,
 }) => {
   const [tagInput, setTagInput] = useState("");
   const [tagError, setTagError] = useState<string | null>(null);
@@ -242,110 +246,143 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
         )}
       </div>
 
-      {/* 4. Main Textarea */}
-      <div className="relative mb-3">
-        <textarea
-          id="journal-content-textarea"
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          placeholder={activeMode === "brainstorm"
-            ? "Drop a problem, goal, or half-formed idea here… let's explore angles and next steps."
-            : "Begin writing your reflection, notes, or thoughts here… pour out whatever is on your mind."}
-          rows={7}
-          className="w-full text-stone-800 text-sm leading-relaxed p-4 rounded-xl bg-stone-50/40 border border-stone-200 placeholder-stone-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-stone-900/10 focus:border-stone-400 transition resize-y font-sans"
-        />
-
-        <div className="absolute right-3 bottom-3 flex items-center gap-2 pointer-events-none">
-          <span className="text-[11px] text-stone-400 bg-white/90 px-2 py-0.5 rounded-md border border-stone-200/60">
-            {wordCount} {wordCount === 1 ? "word" : "words"}
-          </span>
-        </div>
-      </div>
-
-      {/* 4. Prompt Starters (only when empty) */}
-      {!content.trim() && (
-        <div className="mb-4">
-          <div className="flex items-center gap-1.5 text-stone-500 text-xs font-medium mb-2">
-            <Lightbulb className="w-3.5 h-3.5 text-amber-500" />
-            <span>{activeMode === "brainstorm" ? "Need a spark? Try a brainstorm starter:" : "Need a spark? Try a reflection starter:"}</span>
+      {/* 4. Main Textarea or Masked Notice when Locked */}
+      {isLockedMasked ? (
+        <div
+          id="journal-locked-body-mask"
+          className="p-8 sm:p-10 rounded-xl bg-stone-50/70 border border-dashed border-stone-300 flex flex-col items-center justify-center text-center space-y-3 my-2"
+        >
+          <div className="w-10 h-10 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center">
+            <Lock className="w-5 h-5" />
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {starters.map((prompt, idx) => (
-              <button
-                key={idx}
-                type="button"
-                onClick={() => handleApplyStarter(prompt)}
-                className="text-left text-xs p-2.5 rounded-xl bg-stone-50 hover:bg-amber-50/50 hover:border-amber-200 text-stone-600 border border-stone-200/80 transition cursor-pointer leading-snug"
-              >
-                {prompt}
-              </button>
-            ))}
+          <div>
+            <p className="text-sm font-semibold text-stone-800">
+              🔒 This entry's text is locked
+            </p>
+            <p className="text-xs text-stone-500 mt-1 max-w-sm">
+              The reflection text is protected. Enter your PIN to reveal the raw text and converse with Gemini.
+            </p>
           </div>
-        </div>
-      )}
-
-      {/* 5. Action Row with Clear Hierarchy */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-3 border-t border-stone-100">
-        {/* Left: Demoted Save Draft + Saved Status */}
-        <div className="flex items-center gap-2.5">
-          <button
-            id="editor-save-firestore-btn"
-            type="button"
-            onClick={onSave}
-            disabled={isSaving}
-            title="Save current draft to Firestore"
-            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg text-stone-600 hover:text-stone-900 hover:bg-stone-100 active:scale-95 disabled:opacity-40 transition cursor-pointer"
-          >
-            <Save className={`w-3.5 h-3.5 text-stone-500 ${isSaving ? "animate-pulse" : ""}`} />
-            <span>{isSaving ? "Saving..." : "Save draft"}</span>
-          </button>
-
-          <span className="text-stone-300">·</span>
-
-          {lastSavedAt ? (
-            <span className="inline-flex items-center gap-1 text-xs text-stone-500">
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-              Saved {new Date(lastSavedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-            </span>
-          ) : (
-            <span className="text-xs text-stone-400">Unsaved draft</span>
+          {onRequestUnlock && (
+            <button
+              id="editor-unlock-view-btn"
+              type="button"
+              onClick={onRequestUnlock}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-stone-900 text-stone-50 hover:bg-stone-800 text-xs font-medium cursor-pointer shadow-xs active:scale-95 transition"
+            >
+              <Lock className="w-3.5 h-3.5 text-amber-400" />
+              <span>Unlock to view</span>
+            </button>
           )}
         </div>
+      ) : (
+        <>
+          {/* Main Textarea */}
+          <div className="relative mb-3">
+            <textarea
+              id="journal-content-textarea"
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              placeholder={activeMode === "brainstorm"
+                ? "Drop a problem, goal, or half-formed idea here… let's explore angles and next steps."
+                : "Begin writing your reflection, notes, or thoughts here… pour out whatever is on your mind."}
+              rows={7}
+              className="w-full text-stone-800 text-sm leading-relaxed p-4 rounded-xl bg-stone-50/40 border border-stone-200 placeholder-stone-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-stone-900/10 focus:border-stone-400 transition resize-y font-sans"
+            />
 
-        {/* Right: AI Actions (Secondary: Synthesize, Primary: Ask Gemini to Reflect) */}
-        <div className="flex items-center justify-end gap-2.5 flex-wrap">
-          {/* Secondary: Synthesize (Quieter outline/ghost style with subtitle/tooltip) */}
-          <div className="flex items-center">
-            <button
-              id="editor-summarize-ai-btn"
-              type="button"
-              onClick={onSummarizeWithAI}
-              disabled={!content.trim() || isAiSummarizing}
-              title="Runs all 4 agents once for a structured summary (title, mood, themes, coach question)."
-              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border border-stone-200 bg-white hover:bg-stone-50 text-stone-700 hover:text-stone-900 active:scale-95 disabled:opacity-40 transition shadow-2xs cursor-pointer group"
-            >
-              <Sparkles className={`w-3.5 h-3.5 text-amber-600 ${isAiSummarizing ? "animate-spin" : ""}`} />
-              <span>{isAiSummarizing ? "Synthesizing..." : "Synthesize"}</span>
-              <span className="text-[10px] text-stone-400 font-normal hidden md:inline group-hover:text-stone-500">
-                · 4 agents
+            <div className="absolute right-3 bottom-3 flex items-center gap-2 pointer-events-none">
+              <span className="text-[11px] text-stone-400 bg-white/90 px-2 py-0.5 rounded-md border border-stone-200/60">
+                {wordCount} {wordCount === 1 ? "word" : "words"}
               </span>
-            </button>
+            </div>
           </div>
 
-          {/* Primary: Ask Gemini to Reflect (Most prominent amber button) */}
-          <button
-            id="editor-reflect-ai-btn"
-            type="button"
-            onClick={onReflectWithAI}
-            disabled={!content.trim() || isAiReflecting}
-            title="Starts a back-and-forth conversation below."
-            className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-lg bg-amber-500 hover:bg-amber-600 active:scale-95 text-stone-950 shadow-xs hover:shadow-sm disabled:opacity-40 transition cursor-pointer"
-          >
-            <Sparkles className={`w-3.5 h-3.5 text-stone-950 ${isAiReflecting ? "animate-spin" : ""}`} />
-            <span>{isAiReflecting ? "Reflecting..." : "Ask Gemini to Reflect"}</span>
-          </button>
-        </div>
-      </div>
+          {/* Prompt Starters (only when empty) */}
+          {!content.trim() && (
+            <div className="mb-4">
+              <div className="flex items-center gap-1.5 text-stone-500 text-xs font-medium mb-2">
+                <Lightbulb className="w-3.5 h-3.5 text-amber-500" />
+                <span>{activeMode === "brainstorm" ? "Need a spark? Try a brainstorm starter:" : "Need a spark? Try a reflection starter:"}</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {starters.map((prompt, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => handleApplyStarter(prompt)}
+                    className="text-left text-xs p-2.5 rounded-xl bg-stone-50 hover:bg-amber-50/50 hover:border-amber-200 text-stone-600 border border-stone-200/80 transition cursor-pointer leading-snug"
+                  >
+                    {prompt}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Action Row with Clear Hierarchy */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-3 border-t border-stone-100">
+            {/* Left: Demoted Save Draft + Saved Status */}
+            <div className="flex items-center gap-2.5">
+              <button
+                id="editor-save-firestore-btn"
+                type="button"
+                onClick={onSave}
+                disabled={isSaving}
+                title="Save current draft to Firestore"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg text-stone-600 hover:text-stone-900 hover:bg-stone-100 active:scale-95 disabled:opacity-40 transition cursor-pointer"
+              >
+                <Save className={`w-3.5 h-3.5 text-stone-500 ${isSaving ? "animate-pulse" : ""}`} />
+                <span>{isSaving ? "Saving..." : "Save draft"}</span>
+              </button>
+
+              <span className="text-stone-300">·</span>
+
+              {lastSavedAt ? (
+                <span className="inline-flex items-center gap-1 text-xs text-stone-500">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                  Saved {new Date(lastSavedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                </span>
+              ) : (
+                <span className="text-xs text-stone-400">Unsaved draft</span>
+              )}
+            </div>
+
+            {/* Right: AI Actions (Secondary: Synthesize, Primary: Ask Gemini to Reflect) */}
+            <div className="flex items-center justify-end gap-2.5 flex-wrap">
+              {/* Secondary: Synthesize (Quieter outline/ghost style with subtitle/tooltip) */}
+              <div className="flex items-center">
+                <button
+                  id="editor-summarize-ai-btn"
+                  type="button"
+                  onClick={onSummarizeWithAI}
+                  disabled={!content.trim() || isAiSummarizing}
+                  title="Runs all 4 agents once for a structured summary (title, mood, themes, coach question)."
+                  className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border border-stone-200 bg-white hover:bg-stone-50 text-stone-700 hover:text-stone-900 active:scale-95 disabled:opacity-40 transition shadow-2xs cursor-pointer group"
+                >
+                  <Sparkles className={`w-3.5 h-3.5 text-amber-600 ${isAiSummarizing ? "animate-spin" : ""}`} />
+                  <span>{isAiSummarizing ? "Synthesizing..." : "Synthesize"}</span>
+                  <span className="text-[10px] text-stone-400 font-normal hidden md:inline group-hover:text-stone-500">
+                    · 4 agents
+                  </span>
+                </button>
+              </div>
+
+              {/* Primary: Ask Gemini to Reflect (Most prominent amber button) */}
+              <button
+                id="editor-reflect-ai-btn"
+                type="button"
+                onClick={onReflectWithAI}
+                disabled={!content.trim() || isAiReflecting}
+                title="Starts a back-and-forth conversation below."
+                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-lg bg-amber-500 hover:bg-amber-600 active:scale-95 text-stone-950 shadow-xs hover:shadow-sm disabled:opacity-40 transition cursor-pointer"
+              >
+                <Sparkles className={`w-3.5 h-3.5 text-stone-950 ${isAiReflecting ? "animate-spin" : ""}`} />
+                <span>{isAiReflecting ? "Reflecting..." : "Ask Gemini to Reflect"}</span>
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 };

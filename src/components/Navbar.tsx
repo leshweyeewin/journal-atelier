@@ -1,5 +1,5 @@
 import React from "react";
-import { LogOut, Plus, ShieldCheck, Sparkles, User as UserIcon } from "lucide-react";
+import { LogOut, Plus, ShieldCheck, Sparkles, TrendingUp, User as UserIcon } from "lucide-react";
 import { AppUser } from "../types";
 import { logOut } from "../firebase";
 import { LogoMark } from "./LogoMark";
@@ -16,8 +16,8 @@ interface NavbarProps {
   isSaving?: boolean;
   isTelegramConnected?: boolean;
   onOpenTelegramSettings?: () => void;
-  view?: "journal" | "studio";
-  onNavigate?: (view: "journal" | "studio") => void;
+  view?: "journal" | "studio" | "dashboard";
+  onNavigate?: (view: "journal" | "studio" | "dashboard") => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -61,6 +61,19 @@ export const Navbar: React.FC<NavbarProps> = ({
                 }`}
               >
                 Journal
+              </button>
+              <button
+                id="nav-dashboard-btn"
+                type="button"
+                onClick={() => onNavigate("dashboard")}
+                className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 text-xs rounded-lg transition cursor-pointer ${
+                  view === "dashboard"
+                    ? "bg-white text-amber-950 shadow-2xs font-semibold"
+                    : "text-stone-600 hover:text-stone-900 font-medium"
+                }`}
+              >
+                <TrendingUp className={`w-3.5 h-3.5 ${view === "dashboard" ? "text-amber-700" : "text-stone-500"}`} />
+                <span>Trends</span>
               </button>
               <button
                 id="nav-studio-btn"

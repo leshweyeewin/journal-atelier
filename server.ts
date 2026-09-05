@@ -1315,6 +1315,53 @@ Return a JSON object with 'risks' (array of 2-3 strings) and 'firstStep' (one se
 // AI Project Studio Ideation Endpoint
 app.post("/api/ideate", verifyUserToken, handleIdeate);
 
+/**
+ * Outbound Telegram Notification for Saved Project Ideas (Section 11 External Notification Security)
+ * POST /api/notify/project-saved
+ * - Authenticated with verifyUserToken middleware
+ * - Derives uid strictly from verified token
+ * - Minimal sanitised payload (title, oneLiner, firstStep); never raw entry or confidential data
+ * - Non-blocking best effort: returns { success: true } even if telegram is unconfigured
+ */
+app.post("/api/notify/project-saved", verifyUserToken, async (req: Request, res: Response) => {
+  const uid = (req as any).user?.uid;
+  if (!uid) {
+    return res.status(401).json({ error: "Unauthorized: Invalid or missing user identity." });
+  }
+
+  const data = req.body && typeof req.body === "object" ? req.body : {};
+  const rawTitle = typeof data.title === "string" ? data.title : "";
+  const rawOneLiner = typeof data.oneLiner === "string" ? data.oneLiner : "";
+  const rawFirstStep = typeof data.firstStep === "string" ? data.firstStep : "";
+
+  try {
+    const authHeader = req.headers.authorization || "";
+    const userToken = authHeader.replace(/^Bearer\s+/i, "");
+    const telegramChatId = await getTelegramChatIdForUser(uid, userToken);
+
+    if (telegramChatId) {
+      const title = rawTitle.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "").trim();
+      const oneLiner = rawOneLiner.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "").trim();
+      const firstStep = rawFirstStep.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "").trim();
+
+      const messageText = [
+        "🚀 Journal Atelier — Project Idea Saved",
+        title ? `Idea: ${title}` : "",
+        oneLiner ? oneLiner : "",
+        firstStep ? `First step: ${firstStep}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n\n");
+
+      await sendTelegram(telegramChatId, messageText);
+    }
+  } catch (err: any) {
+    console.warn("[Telegram] Outbound notification delivery warning in /api/notify/project-saved:", err?.message || err);
+  }
+
+  return res.json({ success: true });
+});
+
 // Outbound Telegram Settings Endpoints (Section 11 External Notification Security)
 app.get("/api/settings/telegram", verifyUserToken, async (req: Request, res: Response) => {
   const uid = (req as any).user?.uid;

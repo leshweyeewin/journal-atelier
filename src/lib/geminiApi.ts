@@ -242,3 +242,29 @@ export async function saveTelegramSettings(chatId: string | null): Promise<Teleg
 
   return await response.json();
 }
+
+/**
+ * Send an outbound Telegram notification when a project idea is saved.
+ * Fire-and-forget: swallows errors and never throws so it won't block UI state.
+ */
+export async function notifyProjectSaved(payload: {
+  title?: string;
+  oneLiner?: string;
+  firstStep?: string;
+}): Promise<void> {
+  try {
+    const token = await getIdToken();
+    if (!token) return;
+
+    await fetch("/api/notify/project-saved", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch (err) {
+    console.warn("[Telegram] Failed to dispatch project-saved notification:", err);
+  }
+}

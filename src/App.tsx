@@ -12,6 +12,7 @@ import { ErrorBanner } from "./components/ErrorBanner";
 import { TelegramSettings } from "./components/TelegramSettings";
 import { ProjectStudio } from "./components/ProjectStudio";
 import { PinModal } from "./components/PinModal";
+import { DashboardView } from "./components/DashboardView";
 import {
   saveInteraction,
   subscribeUserInteractions,
@@ -25,6 +26,7 @@ import {
   callGeminiChat,
   callMultiAgentReflect,
   getTelegramSettings,
+  notifyProjectSaved,
 } from "./lib/geminiApi";
 
 export default function App() {
@@ -55,7 +57,7 @@ export default function App() {
   const [isTelegramConnected, setIsTelegramConnected] = useState(false);
   const [isTelegramModalOpen, setIsTelegramModalOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [view, setView] = useState<"journal" | "studio">("journal");
+  const [view, setView] = useState<"journal" | "studio" | "dashboard">("journal");
   const [studioToast, setStudioToast] = useState<string | null>(null);
 
   // Auto-dismiss studio toast
@@ -71,6 +73,8 @@ export default function App() {
   const [pinModal, setPinModal] = useState<"set" | "enter" | null>(null);
   const [pendingLockedEntry, setPendingLockedEntry] = useState<JournalInteraction | null>(null);
   const hasPin = !!security;
+  const activeEntry = interactions.find((e) => e.id === activeId);
+  const isCurrentEntryMasked = Boolean(activeEntry?.locked && !isUnlocked);
 
   // Listen to Firebase Authentication state
   useEffect(() => {
@@ -157,55 +161,58 @@ export default function App() {
     setView("journal");
   }, []);
 
-  // Extracted entry loader without lock guard (used by selection and post-PIN unlock)
-  const openEntry = useCallback((entry: JournalInteraction) => {
-    setView("journal");
-    setActiveId(entry.id);
-    setTitle(entry.title || "");
-    setContent(entry.content || (entry as any).idea || (entry as any).oneLiner || "");
-    setTags(Array.isArray(entry.tags) ? entry.tags : []);
-    setMode(entry.mode === "summarize" ? "reflect" : entry.mode || "reflect");
-    setMessages(Array.isArray(entry.messages) ? entry.messages : []);
-    setAgentLoadingState(null);
-    if (
-      entry.summary ||
-      entry.insights?.length ||
-      entry.reflection ||
-      entry.sentiment ||
-      entry.themes?.length ||
-      entry.coachPrompt ||
-      entry.mood
-    ) {
-      setSummaryData({
-        suggestedTitle: entry.title,
-        summary: entry.summary,
-        insights: entry.insights,
-        tags: entry.tags,
-        mood: entry.sentiment?.tag || entry.mood,
-        reflection: entry.reflection,
-        sentiment: entry.sentiment,
-        themes: entry.themes,
-        coachPrompt: entry.coachPrompt,
-        modelUsed: entry.modelUsed,
-      });
-    } else {
-      setSummaryData(null);
-    }
-    const parsedTime = entry.updatedAt ? new Date(entry.updatedAt).getTime() : null;
-    setLastSavedAt(!isNaN(parsedTime as number) ? parsedTime : null);
-    setErrorMessage(null);
-    setFailedSavePayload(null);
-  }, []);
+  // Extracted entry loader (shows summary level, masks raw text if locked & not unlocked)
+  const openEntry = useCallback(
+    (entry: JournalInteraction, forceUnlocked = false) => {
+      setView("journal");
+      setActiveId(entry.id);
+      setTitle(entry.title || "");
+      const masked = Boolean(entry.locked && !(forceUnlocked || isUnlocked));
+      setContent(masked ? "" : (entry.content || (entry as any).idea || (entry as any).oneLiner || ""));
+      setTags(Array.isArray(entry.tags) ? entry.tags : []);
+      setMode(entry.mode === "summarize" ? "reflect" : entry.mode || "reflect");
+      setMessages(masked ? [] : (Array.isArray(entry.messages) ? entry.messages : []));
+      setAgentLoadingState(null);
+      if (
+        entry.summary ||
+        entry.insights?.length ||
+        entry.reflection ||
+        entry.sentiment ||
+        entry.themes?.length ||
+        entry.coachPrompt ||
+        entry.mood
+      ) {
+        setSummaryData({
+          suggestedTitle: entry.title,
+          summary: entry.summary,
+          insights: entry.insights,
+          tags: entry.tags,
+          mood: entry.sentiment?.tag || entry.mood,
+          reflection: entry.reflection,
+          sentiment: entry.sentiment,
+          themes: entry.themes,
+          coachPrompt: entry.coachPrompt,
+          modelUsed: entry.modelUsed,
+        });
+      } else {
+        setSummaryData(null);
+      }
+      const parsedTime = entry.updatedAt ? new Date(entry.updatedAt).getTime() : null;
+      setLastSavedAt(!isNaN(parsedTime as number) ? parsedTime : null);
+      setErrorMessage(null);
+      setFailedSavePayload(null);
+    },
+    [isUnlocked]
+  );
 
-  // Handler to select an existing reflection from history
-  const handleSelectEntry = useCallback((entry: JournalInteraction) => {
-    if (entry.locked && !isUnlocked) {
-      setPendingLockedEntry(entry);
-      setPinModal("enter");
-      return;
-    }
-    openEntry(entry);
-  }, [isUnlocked, openEntry]);
+  // Handler to select an existing reflection from history: opens immediately without forcing PIN modal
+  const handleSelectEntry = useCallback(
+    (entry: JournalInteraction) => {
+      openEntry(entry);
+      setView("journal");
+    },
+    [openEntry]
+  );
 
   // PIN security handlers
   const handleSetPin = async (pin: string) => {
@@ -217,6 +224,11 @@ export default function App() {
     setSecurity(s);
     setIsUnlocked(true);
     setPinModal(null);
+    const target = pendingLockedEntry || interactions.find((e) => e.id === activeId);
+    if (target) {
+      openEntry(target, true);
+      setPendingLockedEntry(null);
+    }
     return null;
   };
 
@@ -226,8 +238,9 @@ export default function App() {
     if (!safeEqual(hash, security.hash)) return "Incorrect PIN";
     setIsUnlocked(true);
     setPinModal(null);
-    if (pendingLockedEntry) {
-      openEntry(pendingLockedEntry);
+    const target = pendingLockedEntry || interactions.find((e) => e.id === activeId);
+    if (target) {
+      openEntry(target, true);
       setPendingLockedEntry(null);
     }
     return null;
@@ -283,6 +296,12 @@ export default function App() {
           projectIdea: idea,
         });
         setStudioToast("Idea saved to your history.");
+        // Fire-and-forget outbound Telegram notification (best-effort, non-blocking)
+        notifyProjectSaved({
+          title: idea.title,
+          oneLiner: idea.oneLiner,
+          firstStep: idea.firstStep,
+        });
       } catch {
         setStudioToast("Could not save idea. Please try again.");
       }
@@ -296,12 +315,19 @@ export default function App() {
     setIsSaving(true);
     setErrorMessage(null);
 
+    const currentActive = interactions.find((e) => e.id === activeId);
+    const isMasked = Boolean(currentActive?.locked && !isUnlocked);
+
+    // SECURITY: If the entry is currently masked (locked & not unlocked), never overwrite the stored raw text/messages with empty strings!
+    const effectiveContent = isMasked ? (currentActive?.content || "") : content;
+    const effectiveMessages = isMasked ? (currentActive?.messages || []) : messages;
+
     const payloadToSave: Partial<JournalInteraction> & { id: string } = {
       id: activeId,
       title: title.trim() || summaryData?.suggestedTitle || "Untitled Reflection",
-      content,
+      content: effectiveContent,
       mode,
-      messages,
+      messages: effectiveMessages,
       summary: summaryData?.summary || "",
       insights: summaryData?.insights || [],
       tags: override?.tags !== undefined ? override.tags : tags,
@@ -414,6 +440,10 @@ export default function App() {
 
   // Explicit Save button click: saves entry and then triggers multi-agent reflection
   const handleManualSave = async () => {
+    if (isCurrentEntryMasked) {
+      setPinModal("enter");
+      return;
+    }
     if (!content.trim()) return;
     const currentId = activeId;
     const currentContent = content;
@@ -426,6 +456,10 @@ export default function App() {
 
   // Reflect with Gemini based on user's current written reflection
   const handleReflectWithAI = async () => {
+    if (isCurrentEntryMasked) {
+      setPinModal("enter");
+      return;
+    }
     if (!content.trim() || !currentUser) return;
     setIsAiReflecting(true);
     setErrorMessage(null);
@@ -468,6 +502,10 @@ export default function App() {
 
   // Send a message inside the multi-turn chat stream
   const handleSendChatMessage = async (text: string) => {
+    if (isCurrentEntryMasked) {
+      setPinModal("enter");
+      return;
+    }
     if (!currentUser || !text.trim()) return;
     setIsAiReflecting(true);
     setErrorMessage(null);
@@ -511,6 +549,10 @@ export default function App() {
 
   // Unified Synthesize action: triggers the 4-agent reflection pipeline
   const handleSummarizeWithAI = async () => {
+    if (isCurrentEntryMasked) {
+      setPinModal("enter");
+      return;
+    }
     if (!content.trim() || !currentUser) return;
     setIsAiSummarizing(true);
     setErrorMessage(null);
@@ -569,10 +611,17 @@ export default function App() {
           onRequestUnlock={() => setPinModal("enter")}
         />
 
-        {/* Main Stage: Active Journal Atelier or Project Studio */}
+        {/* Main Stage: Active Journal Atelier, Project Studio, or Dashboard Trends */}
         <main className="flex-1 p-4 sm:p-6 overflow-y-auto flex flex-col">
           {view === "studio" ? (
             <ProjectStudio onSaveIdea={handleSaveIdea} />
+          ) : view === "dashboard" ? (
+            <DashboardView
+              entries={interactions}
+              onSelectEntry={handleSelectEntry}
+              onNewEntry={handleNewEntry}
+              isUnlocked={isUnlocked}
+            />
           ) : (
             <>
               {/* Error Banner with guaranteed retry */}
@@ -625,6 +674,8 @@ export default function App() {
                 isAiReflecting={isAiReflecting}
                 isAiSummarizing={isAiSummarizing}
                 lastSavedAt={lastSavedAt}
+                isLockedMasked={isCurrentEntryMasked}
+                onRequestUnlock={() => setPinModal("enter")}
               />
 
               {/* Multi-turn Dialogue Stream with Gemini */}
@@ -634,6 +685,8 @@ export default function App() {
                   onSendMessage={handleSendChatMessage}
                   isLoading={isAiReflecting}
                   disabled={!content.trim() && messages.length === 0}
+                  isLockedMasked={isCurrentEntryMasked}
+                  onRequestUnlock={() => setPinModal("enter")}
                 />
               </div>
             </>

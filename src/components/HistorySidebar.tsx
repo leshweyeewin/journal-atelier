@@ -155,16 +155,16 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
           filteredEntries.map((entry) => {
             const isActive = entry.id === activeEntryId;
             const isMasked = entry.locked && !isUnlocked;
-            const cardTitle = isMasked ? "🔒 Locked entry" : (entry.title || "Untitled Reflection");
+            const cardTitle = entry.title || "Untitled Reflection";
             const cardPreview = isMasked
-              ? "Enter your PIN to view"
+              ? (entry.reflection ? entry.reflection : "🔒 Text hidden — tap to unlock")
               : (entry.content || (entry.messages && entry.messages.length > 0 ? entry.messages[0].content : "No reflection body yet..."));
 
             return (
               <div
                 key={entry.id}
                 id={`sidebar-entry-${entry.id}`}
-                onClick={() => (isMasked ? onRequestUnlock() : onSelectEntry(entry))}
+                onClick={() => onSelectEntry(entry)}
                 className={`group relative p-3 rounded-xl border text-left cursor-pointer transition-all ${
                   isActive
                     ? "bg-white border-stone-400 shadow-xs ring-1 ring-stone-900/5"
@@ -172,7 +172,7 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
                 }`}
               >
                 <div className="flex items-start justify-between gap-2 mb-1">
-                  <h3 className={`text-xs font-semibold truncate flex-1 ${isMasked ? "text-stone-500 italic" : "text-stone-900"}`}>
+                  <h3 className="text-xs font-semibold truncate flex-1 text-stone-900">
                     {cardTitle}
                   </h3>
                   <span className="text-[10px] text-stone-400 shrink-0 flex items-center gap-1">
@@ -181,18 +181,18 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
                   </span>
                 </div>
 
-                <p className={`text-[11px] line-clamp-2 mb-2 leading-relaxed ${isMasked ? "text-stone-400 italic" : "text-stone-500"}`}>
+                <p className={`text-[11px] line-clamp-2 mb-2 leading-relaxed ${isMasked && !entry.reflection ? "text-stone-400 italic" : "text-stone-500"}`}>
                   {cardPreview}
                 </p>
 
                 <div className="flex items-center justify-between pt-1 border-t border-stone-100">
                   <div className="flex items-center gap-1.5 flex-wrap overflow-hidden">
-                    {!isMasked && entry.mood && (
+                    {(entry.sentiment?.tag || entry.mood) && (
                       <span className="inline-flex items-center text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200/60 font-medium">
-                        {entry.mood}
+                        {entry.sentiment?.tag || entry.mood}
                       </span>
                     )}
-                    {!isMasked && entry.tags && entry.tags.length > 0 && (
+                    {entry.tags && entry.tags.length > 0 && (
                       <span className="inline-flex items-center gap-0.5 text-[10px] text-stone-600 max-w-[110px] truncate bg-stone-100/90 px-1.5 py-0.5 rounded border border-stone-200/60 font-medium">
                         <Tag className="w-2.5 h-2.5 text-stone-400 shrink-0" />
                         <span className="truncate">#{entry.tags[0]}</span>
