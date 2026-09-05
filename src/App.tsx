@@ -40,6 +40,7 @@ export default function App() {
   const [title, setTitle] = useState<string>("");
   const [content, setContent] = useState<string>("");
   const [mode, setMode] = useState<ReflectionMode>("reflect");
+  const [tags, setTags] = useState<string[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [summaryData, setSummaryData] = useState<SummaryResult | null>(null);
   const [agentLoadingState, setAgentLoadingState] = useState<AgentLoadingState | null>(null);
@@ -137,6 +138,7 @@ export default function App() {
     setActiveId(newId);
     setTitle("");
     setContent("");
+    setTags([]);
     setMode("reflect");
     setMessages([]);
     setSummaryData(null);
@@ -147,18 +149,13 @@ export default function App() {
     setView("journal");
   }, []);
 
-  // Handler to select an existing reflection from history
-  const handleSelectEntry = useCallback((entry: JournalInteraction) => {
-    if (entry.locked && !isUnlocked) {
-      setPendingLockedEntry(entry);
-      setPinModal("enter");
-      return;
-    }
-
+  // Extracted entry loader without lock guard (used by selection and post-PIN unlock)
+  const openEntry = useCallback((entry: JournalInteraction) => {
     setView("journal");
     setActiveId(entry.id);
     setTitle(entry.title || "");
     setContent(entry.content || (entry as any).idea || (entry as any).oneLiner || "");
+    setTags(Array.isArray(entry.tags) ? entry.tags : []);
     setMode(entry.mode === "summarize" ? "reflect" : entry.mode || "reflect");
     setMessages(Array.isArray(entry.messages) ? entry.messages : []);
     setAgentLoadingState(null);
@@ -190,7 +187,17 @@ export default function App() {
     setLastSavedAt(!isNaN(parsedTime as number) ? parsedTime : null);
     setErrorMessage(null);
     setFailedSavePayload(null);
-  }, [isUnlocked]);
+  }, []);
+
+  // Handler to select an existing reflection from history
+  const handleSelectEntry = useCallback((entry: JournalInteraction) => {
+    if (entry.locked && !isUnlocked) {
+      setPendingLockedEntry(entry);
+      setPinModal("enter");
+      return;
+    }
+    openEntry(entry);
+  }, [isUnlocked, openEntry]);
 
   // PIN security handlers
   const handleSetPin = async (pin: string) => {
@@ -212,7 +219,7 @@ export default function App() {
     setIsUnlocked(true);
     setPinModal(null);
     if (pendingLockedEntry) {
-      handleSelectEntry(pendingLockedEntry);
+      openEntry(pendingLockedEntry);
       setPendingLockedEntry(null);
     }
     return null;
@@ -257,7 +264,7 @@ export default function App() {
       messages,
       summary: summaryData?.summary || "",
       insights: summaryData?.insights || [],
-      tags: summaryData?.tags || [],
+      tags: override?.tags !== undefined ? override.tags : tags,
       mood: summaryData?.sentiment?.tag || summaryData?.mood || "",
       reflection: summaryData?.reflection || "",
       sentiment: summaryData?.sentiment,
@@ -282,6 +289,30 @@ export default function App() {
     }
   };
 
+  // Tag management handlers with immediate Firestore persistence for active entries
+  const handleAddTag = async (tagText: string) => {
+    const cleanTag = tagText.trim().replace(/^#+/, "").replace(/[<>{}[\]\\\/]/g, "").trim();
+    if (!cleanTag) return;
+    if (tags.some((t) => t.toLowerCase() === cleanTag.toLowerCase())) return;
+
+    const nextTags = [...tags, cleanTag];
+    setTags(nextTags);
+
+    // If entry has content/title or has already been saved, persist to Firestore immediately
+    if (currentUser && (content.trim() || title.trim() || lastSavedAt)) {
+      await persistToFirestore({ tags: nextTags });
+    }
+  };
+
+  const handleRemoveTag = async (tagToRemove: string) => {
+    const nextTags = tags.filter((t) => t !== tagToRemove);
+    setTags(nextTags);
+
+    if (currentUser && (content.trim() || title.trim() || lastSavedAt)) {
+      await persistToFirestore({ tags: nextTags });
+    }
+  };
+
   // Multi-Agent Analysis Runner (Section 10 Orchestration)
   // Shows per-agent loading state, updates UI state, and updates Firestore
   const runMultiAgentAnalysis = async (targetId: string, entryContent: string) => {
@@ -291,6 +322,14 @@ export default function App() {
     try {
       const result = await callMultiAgentReflect(entryContent);
 
+      let combinedTags = tags;
+      if (Array.isArray(result.tags) && result.tags.length > 0) {
+        const existingLower = new Set(tags.map((t) => t.toLowerCase()));
+        const toAdd = result.tags.filter((t) => !existingLower.has(t.toLowerCase()));
+        combinedTags = [...tags, ...toAdd];
+        setTags(combinedTags);
+      }
+
       const updatedSummary: SummaryResult = {
         ...(summaryData || {}),
         suggestedTitle: result.suggestedTitle,
@@ -298,7 +337,7 @@ export default function App() {
         sentiment: result.sentiment,
         themes: result.themes,
         coachPrompt: result.coachPrompt,
-        tags: result.tags,
+        tags: combinedTags,
         summary: result.reflection,
         insights: result.themes,
         mood: result.sentiment?.tag || summaryData?.mood,
@@ -319,7 +358,7 @@ export default function App() {
         sentiment: result.sentiment,
         themes: result.themes || [],
         coachPrompt: result.coachPrompt || "",
-        tags: result.tags || [],
+        tags: combinedTags,
         summary: result.reflection || "",
         insights: result.themes || [],
         mood: result.sentiment?.tag || "",
@@ -535,6 +574,10 @@ export default function App() {
                 setContent={setContent}
                 mode={mode}
                 setMode={setMode}
+                tags={tags}
+                setTags={setTags}
+                onAddTag={handleAddTag}
+                onRemoveTag={handleRemoveTag}
                 onReflectWithAI={handleReflectWithAI}
                 onSummarizeWithAI={handleSummarizeWithAI}
                 onSave={handleManualSave}

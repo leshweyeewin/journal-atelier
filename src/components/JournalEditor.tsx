@@ -1,5 +1,5 @@
-import React from "react";
-import { Sparkles, Lightbulb, Save, CheckCircle2 } from "lucide-react";
+import React, { useState } from "react";
+import { Sparkles, Lightbulb, Save, CheckCircle2, Tag, Plus, X } from "lucide-react";
 import { ReflectionMode } from "../types";
 
 interface JournalEditorProps {
@@ -9,6 +9,10 @@ interface JournalEditorProps {
   setContent: (c: string) => void;
   mode: ReflectionMode;
   setMode: (m: ReflectionMode) => void;
+  tags?: string[];
+  setTags?: (tags: string[]) => void;
+  onAddTag?: (tag: string) => void;
+  onRemoveTag?: (tag: string) => void;
   onReflectWithAI: () => void;
   onSummarizeWithAI: () => void;
   onSave: () => void;
@@ -39,6 +43,10 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
   setContent,
   mode,
   setMode,
+  tags = [],
+  setTags,
+  onAddTag,
+  onRemoveTag,
   onReflectWithAI,
   onSummarizeWithAI,
   onSave,
@@ -47,7 +55,61 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
   isAiSummarizing,
   lastSavedAt,
 }) => {
+  const [tagInput, setTagInput] = useState("");
+  const [tagError, setTagError] = useState<string | null>(null);
+
   const wordCount = content.trim() ? content.trim().split(/\s+/).length : 0;
+
+  const sanitizeTag = (t: string): string => {
+    return t
+      .trim()
+      .replace(/^#+/, "")
+      .replace(/[<>{}[\]\\\/]/g, "")
+      .trim();
+  };
+
+  const handleAddTagAction = (raw: string) => {
+    setTagError(null);
+    const cleaned = sanitizeTag(raw);
+    if (!cleaned) return;
+    if (cleaned.length > 30) {
+      setTagError("Tag must be 30 characters or fewer.");
+      return;
+    }
+    const currentList = Array.isArray(tags) ? tags : [];
+    if (currentList.some((t) => t.toLowerCase() === cleaned.toLowerCase())) {
+      setTagError("Tag already added.");
+      return;
+    }
+    if (currentList.length >= 25) {
+      setTagError("Maximum 25 tags per reflection.");
+      return;
+    }
+
+    if (onAddTag) {
+      onAddTag(cleaned);
+    } else if (setTags) {
+      setTags([...currentList, cleaned]);
+    }
+    setTagInput("");
+  };
+
+  const handleRemoveTagAction = (tagToRemove: string) => {
+    setTagError(null);
+    if (onRemoveTag) {
+      onRemoveTag(tagToRemove);
+    } else if (setTags) {
+      const currentList = Array.isArray(tags) ? tags : [];
+      setTags(currentList.filter((t) => t !== tagToRemove));
+    }
+  };
+
+  const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" || e.key === ",") {
+      e.preventDefault();
+      handleAddTagAction(tagInput);
+    }
+  };
 
   const handleApplyStarter = (prompt: string) => {
     if (!content.trim()) {
@@ -75,7 +137,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
       </div>
 
       {/* 2. Conversation Tone Pills & Helper Line */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 mb-3.5 border-b border-stone-100">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 mb-3 border-b border-stone-100">
         <div className="flex items-center gap-2">
           <span className="text-xs font-semibold text-stone-500 uppercase tracking-wider">
             Tone:
@@ -113,7 +175,74 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
         </p>
       </div>
 
-      {/* 3. Main Textarea */}
+      {/* 3. Custom Tags Section (Removable Pills & Inline Input) */}
+      <div id="journal-tags-section" className="mb-3 space-y-1.5">
+        <div className="flex flex-wrap items-center gap-1.5 min-h-[30px]">
+          <div className="flex items-center gap-1 text-stone-400 mr-0.5">
+            <Tag className="w-3.5 h-3.5 text-stone-400" />
+            <span className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider">
+              Tags:
+            </span>
+          </div>
+
+          {/* Removable Tag Pills */}
+          {tags.map((tag, idx) => (
+            <span
+              key={`${tag}-${idx}`}
+              id={`journal-tag-pill-${idx}`}
+              className="inline-flex items-center gap-1 pl-2.5 pr-1.5 py-0.5 rounded-full text-xs font-medium bg-amber-50/80 text-amber-900 border border-amber-200/70 hover:border-amber-300 transition shadow-2xs group"
+            >
+              <span className="text-amber-700/70 font-semibold text-[11px]">#</span>
+              <span className="max-w-[150px] truncate">{tag}</span>
+              <button
+                id={`journal-remove-tag-btn-${idx}`}
+                type="button"
+                onClick={() => handleRemoveTagAction(tag)}
+                title={`Remove tag "${tag}"`}
+                aria-label={`Remove tag "${tag}"`}
+                className="p-0.5 rounded-full text-amber-700/60 hover:text-red-600 hover:bg-amber-100 active:scale-95 transition cursor-pointer"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          ))}
+
+          {/* Inline Add Tag Input */}
+          <div className="inline-flex items-center gap-1">
+            <input
+              id="journal-tag-input"
+              type="text"
+              value={tagInput}
+              onChange={(e) => {
+                setTagInput(e.target.value);
+                if (tagError) setTagError(null);
+              }}
+              onKeyDown={handleInputKeyDown}
+              placeholder={tags.length > 0 ? "+ tag…" : "Add tags (e.g. mindfulness, idea)…"}
+              maxLength={30}
+              className="px-2.5 py-0.5 text-xs rounded-full border border-stone-200 bg-stone-50/60 hover:bg-white focus:bg-white text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-1 focus:ring-amber-500/30 focus:border-amber-500 transition w-36 sm:w-48"
+            />
+            {tagInput.trim() && (
+              <button
+                id="journal-add-tag-btn"
+                type="button"
+                onClick={() => handleAddTagAction(tagInput)}
+                title="Add tag"
+                className="inline-flex items-center gap-0.5 px-2 py-0.5 text-xs font-medium rounded-full bg-amber-600 text-white hover:bg-amber-700 active:scale-95 transition cursor-pointer shadow-2xs"
+              >
+                <Plus className="w-3 h-3" />
+                <span>Add</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {tagError && (
+          <p className="text-[11px] text-red-600 pl-1">{tagError}</p>
+        )}
+      </div>
+
+      {/* 4. Main Textarea */}
       <div className="relative mb-3">
         <textarea
           id="journal-content-textarea"

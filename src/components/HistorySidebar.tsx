@@ -192,6 +192,15 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
                         {entry.mood}
                       </span>
                     )}
+                    {!isMasked && entry.tags && entry.tags.length > 0 && (
+                      <span className="inline-flex items-center gap-0.5 text-[10px] text-stone-600 max-w-[110px] truncate bg-stone-100/90 px-1.5 py-0.5 rounded border border-stone-200/60 font-medium">
+                        <Tag className="w-2.5 h-2.5 text-stone-400 shrink-0" />
+                        <span className="truncate">#{entry.tags[0]}</span>
+                        {entry.tags.length > 1 && (
+                          <span className="text-[9px] text-stone-400">+{entry.tags.length - 1}</span>
+                        )}
+                      </span>
+                    )}
                     {!isMasked && entry.messages && entry.messages.length > 0 && (
                       <span className="inline-flex items-center gap-0.5 text-[10px] text-stone-500">
                         <Sparkles className="w-2.5 h-2.5 text-stone-400" />
@@ -206,66 +215,68 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
                     )}
                   </div>
 
-                  <div className="flex items-center gap-0.5">
-                    <button
-                      id={`lock-entry-btn-${entry.id}`}
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onToggleLock(entry);
-                      }}
-                      title={entry.locked ? "Unlock entry" : "Lock entry"}
-                      className="opacity-60 group-hover:opacity-100 p-1 text-stone-400 hover:text-amber-700 rounded transition cursor-pointer"
-                      aria-label={entry.locked ? "Unlock entry" : "Lock entry"}
-                    >
-                      {entry.locked ? (
-                        <Lock className="w-3.5 h-3.5 text-amber-700" />
-                      ) : (
-                        <LockOpen className="w-3.5 h-3.5" />
-                      )}
-                    </button>
+                    {!isMasked && (
+                      <div className="flex items-center gap-0.5">
+                        <button
+                          id={`lock-entry-btn-${entry.id}`}
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onToggleLock(entry);
+                          }}
+                          title={entry.locked ? "Unlock entry" : "Lock entry"}
+                          className="opacity-60 group-hover:opacity-100 p-1 text-stone-400 hover:text-amber-700 rounded transition cursor-pointer"
+                          aria-label={entry.locked ? "Unlock entry" : "Lock entry"}
+                        >
+                          {entry.locked ? (
+                            <Lock className="w-3.5 h-3.5 text-amber-700" />
+                          ) : (
+                            <LockOpen className="w-3.5 h-3.5" />
+                          )}
+                        </button>
 
-                    {confirmingId === entry.id ? (
-                      <span className="flex items-center gap-1.5 text-[11px]">
-                        <span className="text-stone-500">Delete?</span>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onDeleteEntry(entry.id, e);
-                            setConfirmingId(null);
-                          }}
-                          className="font-medium text-red-600 hover:text-red-700 cursor-pointer px-1 py-0.5 rounded hover:bg-red-50 transition"
-                        >
-                          Delete
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setConfirmingId(null);
-                          }}
-                          className="text-stone-500 hover:text-stone-700 cursor-pointer px-1 py-0.5 rounded hover:bg-stone-100 transition"
-                        >
-                          Cancel
-                        </button>
-                      </span>
-                    ) : (
-                      <button
-                        id={`delete-entry-btn-${entry.id}`}
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setConfirmingId(entry.id);
-                        }}
-                        title="Delete Entry"
-                        className="opacity-60 group-hover:opacity-100 p-1 text-stone-400 hover:text-red-600 rounded transition cursor-pointer"
-                        aria-label="Delete entry"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                        {confirmingId === entry.id ? (
+                          <span className="flex items-center gap-1.5 text-[11px]">
+                            <span className="text-stone-500">Delete?</span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onDeleteEntry(entry.id, e);
+                                setConfirmingId(null);
+                              }}
+                              className="font-medium text-red-600 hover:text-red-700 cursor-pointer px-1 py-0.5 rounded hover:bg-red-50 transition"
+                            >
+                              Delete
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setConfirmingId(null);
+                              }}
+                              className="text-stone-500 hover:text-stone-700 cursor-pointer px-1 py-0.5 rounded hover:bg-stone-100 transition"
+                            >
+                              Cancel
+                            </button>
+                          </span>
+                        ) : (
+                          <button
+                            id={`delete-entry-btn-${entry.id}`}
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setConfirmingId(entry.id);
+                            }}
+                            title="Delete Entry"
+                            className="opacity-60 group-hover:opacity-100 p-1 text-stone-400 hover:text-red-600 rounded transition cursor-pointer"
+                            aria-label="Delete entry"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
                     )}
-                  </div>
                 </div>
               </div>
             );
