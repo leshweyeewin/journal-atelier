@@ -79,7 +79,7 @@ export default function App() {
     const unsubscribe = subscribeUserInteractions(
       currentUser.uid,
       (entries) => {
-        setInteractions(entries);
+        setInteractions(entries.filter((e) => (e as any).type !== "ideation"));
         setListLoading(false);
       },
       (err) => {
@@ -137,9 +137,9 @@ export default function App() {
     setView("journal");
     setActiveId(entry.id);
     setTitle(entry.title || "");
-    setContent(entry.content || "");
+    setContent(entry.content || (entry as any).idea || (entry as any).oneLiner || "");
     setMode(entry.mode === "summarize" ? "reflect" : entry.mode || "reflect");
-    setMessages(entry.messages || []);
+    setMessages(Array.isArray(entry.messages) ? entry.messages : []);
     setAgentLoadingState(null);
     if (
       entry.summary ||
@@ -165,7 +165,8 @@ export default function App() {
     } else {
       setSummaryData(null);
     }
-    setLastSavedAt(entry.updatedAt);
+    const parsedTime = entry.updatedAt ? new Date(entry.updatedAt).getTime() : null;
+    setLastSavedAt(!isNaN(parsedTime as number) ? parsedTime : null);
     setErrorMessage(null);
     setFailedSavePayload(null);
   }, []);

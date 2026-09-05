@@ -23,21 +23,27 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState("");
 
-  const filteredEntries = entries.filter((item) => {
+  const safeEntries = Array.isArray(entries) ? entries : [];
+
+  const filteredEntries = safeEntries.filter((item) => {
+    if (!item) return false;
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
     const titleMatch = item.title?.toLowerCase().includes(q);
     const contentMatch = item.content?.toLowerCase().includes(q);
-    const tagMatch = item.tags?.some((t) => t.toLowerCase().includes(q));
+    const tagMatch = Array.isArray(item.tags) && item.tags.some((t) => typeof t === "string" && t.toLowerCase().includes(q));
     const moodMatch = item.mood?.toLowerCase().includes(q);
-    const themeMatch = item.themes?.some((t) => t.toLowerCase().includes(q));
+    const themeMatch = Array.isArray(item.themes) && item.themes.some((t) => typeof t === "string" && t.toLowerCase().includes(q));
     const coachMatch = item.coachPrompt?.toLowerCase().includes(q);
-    return titleMatch || contentMatch || tagMatch || moodMatch || themeMatch || coachMatch;
+    const ideaMatch = typeof (item as any).idea === "string" && (item as any).idea.toLowerCase().includes(q);
+    const oneLinerMatch = typeof (item as any).oneLiner === "string" && (item as any).oneLiner.toLowerCase().includes(q);
+    return titleMatch || contentMatch || tagMatch || moodMatch || themeMatch || coachMatch || ideaMatch || oneLinerMatch;
   });
 
-  const formatDate = (timestamp: number) => {
+  const formatDate = (timestamp: number | string | undefined) => {
     if (!timestamp) return "";
     const date = new Date(timestamp);
+    if (isNaN(date.getTime())) return "";
     const now = new Date();
     const isToday = date.toDateString() === now.toDateString();
     if (isToday) {
@@ -66,7 +72,7 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
         </button>
 
         <span className="text-[10px] font-medium text-stone-400 md:[writing-mode:vertical-lr] tracking-wider uppercase select-none">
-          Reflections ({entries.length})
+          Reflections ({safeEntries.length})
         </span>
       </aside>
     );
@@ -86,7 +92,7 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
           </div>
           <div className="flex items-center gap-1.5">
             <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-stone-100 text-stone-600">
-              {entries.length} {entries.length === 1 ? "entry" : "entries"}
+              {safeEntries.length} {safeEntries.length === 1 ? "entry" : "entries"}
             </span>
             {onToggleCollapse && (
               <button
@@ -159,7 +165,7 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
                 </div>
 
                 <p className="text-[11px] text-stone-500 line-clamp-2 mb-2 leading-relaxed">
-                  {entry.content || (entry.messages.length > 0 ? entry.messages[0].content : "No reflection body yet...")}
+                  {entry.content || (entry.messages && entry.messages.length > 0 ? entry.messages[0].content : "No reflection body yet...")}
                 </p>
 
                 <div className="flex items-center justify-between pt-1 border-t border-stone-100">

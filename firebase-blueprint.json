@@ -1,0 +1,58 @@
+{
+  "entities": {
+    "interaction": {
+      "fields": {
+        "userId": { "type": "string", "required": true },
+        "title": { "type": "string", "required": false },
+        "content": { "type": "string", "required": false },
+        "type": { "type": "string", "required": false },
+        "mode": { "type": "string", "required": false },
+        "messages": { "type": "array", "required": false },
+        "summary": { "type": "string", "required": false },
+        "insights": { "type": "array", "required": false },
+        "tags": { "type": "array", "required": false },
+        "mood": { "type": "string", "required": false },
+        "modelUsed": { "type": "string", "required": false },
+        "reflection": { "type": "string", "required": false },
+        "sentiment": { "type": "object", "required": false },
+        "themes": { "type": "array", "required": false },
+        "coachPrompt": { "type": "string", "required": false },
+        "idea": { "type": "string", "required": false },
+        "oneLiner": { "type": "string", "required": false },
+        "capabilities": { "type": "array", "required": false },
+        "stack": { "type": "array", "required": false },
+        "uiComponents": { "type": "array", "required": false },
+        "infra": { "type": "array", "required": false },
+        "dataFlow": { "type": "string", "required": false },
+        "milestones": { "type": "array", "required": false },
+        "risks": { "type": "array", "required": false },
+        "firstStep": { "type": "string", "required": false },
+        "createdAt": { "type": "string", "required": false },
+        "updatedAt": { "type": "string", "required": false }
+      }
+    },
+    "setting": {
+      "fields": {
+        "telegramChatId": { "type": "string", "required": false },
+        "updatedAt": { "type": "string", "required": false },
+        "disconnectedAt": { "type": "string", "required": false }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{userId}/interactions/{interactionId}": {
+      "entity": "interaction",
+      "rules": {
+        "read": "request.auth != null && request.auth.uid == userId",
+        "write": "request.auth != null && request.auth.uid == userId"
+      }
+    },
+    "/users/{userId}/settings/{settingId}": {
+      "entity": "setting",
+      "rules": {
+        "read": "request.auth != null && request.auth.uid == userId",
+        "write": "request.auth != null && request.auth.uid == userId"
+      }
+    }
+  }
+}

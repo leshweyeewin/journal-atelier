@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Sparkles,
   Wand2,
@@ -12,12 +12,33 @@ import {
 import { ideate, IdeateResponse } from "../lib/geminiApi";
 import { ErrorBanner } from "./ErrorBanner";
 
+const IDEATION_STAGES = [
+  "Generating the core concept…",
+  "Selecting the right AI capabilities…",
+  "Drafting the architecture blueprint…",
+  "Planning your first actionable steps…",
+];
+
 export const ProjectStudio: React.FC = () => {
   const [seed, setSeed] = useState("");
   const [loading, setLoading] = useState(false);
+  const [stageIndex, setStageIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<IdeateResponse | null>(null);
   const [lastCallSeed, setLastCallSeed] = useState<string>("");
+
+  // Staged advancing status that mirrors the real agent order
+  useEffect(() => {
+    if (!loading) {
+      return;
+    }
+    setStageIndex(0);
+    const interval = setInterval(() => {
+      setStageIndex((prev) => Math.min(prev + 1, IDEATION_STAGES.length - 1));
+    }, 2500);
+
+    return () => clearInterval(interval);
+  }, [loading]);
 
   const handleGenerate = async (inputSeed: string) => {
     setLoading(true);
@@ -108,9 +129,14 @@ export const ProjectStudio: React.FC = () => {
 
           {/* Loading Indicator */}
           {loading && (
-            <div className="flex items-center gap-2.5 text-xs sm:text-sm text-amber-800 bg-amber-50/80 border border-amber-200/70 rounded-xl px-4 py-3 animate-pulse">
-              <Loader2 className="w-4 h-4 animate-spin text-amber-600 shrink-0" />
-              <span>Consulting the idea agents…</span>
+            <div className="flex items-center justify-between text-xs sm:text-sm text-amber-900 bg-amber-50/90 border border-amber-200/80 rounded-xl px-4 py-3 shadow-xs animate-pulse">
+              <div className="flex items-center gap-2.5">
+                <Loader2 className="w-4 h-4 animate-spin text-amber-600 shrink-0" />
+                <span className="font-medium">{IDEATION_STAGES[stageIndex]}</span>
+              </div>
+              <span className="text-[11px] text-amber-700/80 font-mono shrink-0">
+                (step {stageIndex + 1} of {IDEATION_STAGES.length})
+              </span>
             </div>
           )}
         </div>

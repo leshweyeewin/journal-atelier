@@ -102,6 +102,10 @@ export function subscribeUserInteractions(
         entries.push({
           ...data,
           id: docSnap.id,
+          messages: Array.isArray(data.messages) ? data.messages : [],
+          tags: Array.isArray(data.tags) ? data.tags : [],
+          themes: Array.isArray(data.themes) ? data.themes : [],
+          insights: Array.isArray(data.insights) ? data.insights : [],
         });
       });
       onUpdate(entries);
@@ -125,9 +129,14 @@ export async function fetchUserInteractions(userId: string): Promise<JournalInte
   const snapshot = await getDocs(q);
   const entries: JournalInteraction[] = [];
   snapshot.forEach((docSnap) => {
+    const data = docSnap.data() as JournalInteraction;
     entries.push({
-      ...(docSnap.data() as JournalInteraction),
+      ...data,
       id: docSnap.id,
+      messages: Array.isArray(data.messages) ? data.messages : [],
+      tags: Array.isArray(data.tags) ? data.tags : [],
+      themes: Array.isArray(data.themes) ? data.themes : [],
+      insights: Array.isArray(data.insights) ? data.insights : [],
     });
   });
   return entries;
