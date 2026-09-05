@@ -471,9 +471,9 @@ export default function App() {
     }
   };
 
-  // Debounced autosave (~1800ms) for the active journal entry
+  // Debounced autosave (~30000ms) for the active journal entry
   // Security & Resilience:
-  // - Debounce ~1800ms after user stops changing title, content, or tags
+  // - Debounce ~30000ms (30s) after user stops changing title, content, or tags
   // - Only autosaves when content.trim() is non-empty and user is signed in
   // - SECURITY: never autosaves when active entry is locked and not currently revealed
   // - Skips autosave while manual save (isSaving) is in flight to prevent write races
@@ -508,7 +508,7 @@ export default function App() {
 
       persistToFirestore();
       lastSavedSnapshotRef.current = currentSnapshot;
-    }, 1800);
+    }, 30000);
 
     return () => clearTimeout(timer);
   }, [title, content, tags, activeLocked, activeId, unlockedEntryId, view, currentUser, isSaving]);
