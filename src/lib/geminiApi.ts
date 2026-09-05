@@ -268,3 +268,25 @@ export async function notifyProjectSaved(payload: {
     console.warn("[Telegram] Failed to dispatch project-saved notification:", err);
   }
 }
+
+/**
+ * Send an outbound Telegram notification with this week's digest.
+ * Fire-and-forget: swallows errors and never throws so it won't block UI state.
+ */
+export async function sendWeeklyDigest(): Promise<void> {
+  try {
+    const token = await getIdToken();
+    if (!token) return;
+
+    await fetch("/api/notify/weekly-digest", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+    });
+  } catch (err) {
+    console.warn("[Telegram] Failed to dispatch weekly digest notification:", err);
+  }
+}
+

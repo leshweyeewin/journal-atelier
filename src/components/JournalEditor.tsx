@@ -340,7 +340,11 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
               {lastSavedAt ? (
                 <span className="inline-flex items-center gap-1 text-xs text-stone-500">
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                  Saved {new Date(lastSavedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  <span>
+                    {Date.now() - lastSavedAt < 20000
+                      ? "Saved · just now"
+                      : `Saved ${new Date(lastSavedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`}
+                  </span>
                 </span>
               ) : (
                 <span className="text-xs text-stone-400">Unsaved draft</span>

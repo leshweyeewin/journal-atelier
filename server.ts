@@ -1362,6 +1362,169 @@ app.post("/api/notify/project-saved", verifyUserToken, async (req: Request, res:
   return res.json({ success: true });
 });
 
+/**
+ * Outbound Weekly Digest Endpoint (Section 11 External Notification Security)
+ * 1. Protected by verifyUserToken; derives uid strictly from req.user.uid.
+ * 2. Scoped to authenticated user's own interactions collection for the last 7 days.
+ * 3. Builds ONLY summary-level metadata: count, mood tally, top themes, titles.
+ *    NEVER includes content, messages, reflection bodies, or locked entry raw text.
+ * 4. Sanitizes all strings and sends via sendTelegram() with the server-side bot token.
+ * 5. Wrapped in try/catch and always returns { success: true }.
+ */
+app.post("/api/notify/weekly-digest", verifyUserToken, async (req: Request, res: Response) => {
+  const uid = (req as any).user?.uid;
+  if (!uid) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  try {
+    const authHeader = req.headers.authorization || "";
+    const userToken = authHeader.replace(/^Bearer\s+/i, "");
+
+    const telegramChatId = await getTelegramChatIdForUser(uid, userToken);
+    if (!telegramChatId) {
+      return res.json({ success: true, message: "No Telegram connected" });
+    }
+
+    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const pastEntries: any[] = [];
+
+    // 1. Query Firestore using Admin SDK
+    try {
+      const db = getAdminDb();
+      const snapshot = await db
+        .collection(`users/${uid}/interactions`)
+        .orderBy("createdAt", "desc")
+        .limit(50)
+        .get();
+
+      snapshot.forEach((doc) => {
+        const d = doc.data();
+        if (d) pastEntries.push(d);
+      });
+    } catch (dbErr: any) {
+      // Non-blocking fallback
+    }
+
+    // 2. Query Firestore via REST API with user token if Admin SDK returned empty
+    if (pastEntries.length === 0 && userToken && targetProjectId && firestoreDbId) {
+      try {
+        const restUrl = `https://firestore.googleapis.com/v1/projects/${targetProjectId}/databases/${firestoreDbId}/documents/users/${uid}/interactions?pageSize=50`;
+        const restResp = await fetch(restUrl, {
+          headers: { Authorization: `Bearer ${userToken}` },
+        });
+        if (restResp.ok) {
+          const json = (await restResp.json()) as any;
+          if (Array.isArray(json?.documents)) {
+            for (const d of json.documents) {
+              const fields = d.fields || {};
+              const item: any = {};
+              for (const [k, v] of Object.entries<any>(fields)) {
+                if (v.stringValue !== undefined) item[k] = v.stringValue;
+                else if (v.integerValue !== undefined) item[k] = Number(v.integerValue);
+                else if (v.timestampValue !== undefined) item[k] = v.timestampValue;
+                else if (v.arrayValue?.values) {
+                  item[k] = v.arrayValue.values.map((x: any) => x.stringValue || x.integerValue || x);
+                } else if (v.mapValue?.fields) {
+                  const sub: any = {};
+                  for (const [sk, sv] of Object.entries<any>(v.mapValue.fields)) {
+                    sub[sk] = sv.stringValue || sv.numberValue || sv.integerValue;
+                  }
+                  item[k] = sub;
+                }
+              }
+              pastEntries.push(item);
+            }
+          }
+        }
+      } catch {
+        // Non-blocking fallback
+      }
+    }
+
+    const parseTime = (val: any): number => {
+      if (typeof val === "number") return val;
+      if (typeof val === "string") {
+        const p = Date.parse(val);
+        if (!isNaN(p)) return p;
+      }
+      return 0;
+    };
+
+    // Filter to interactions from the last 7 days
+    const weeklyEntries = pastEntries.filter((e) => {
+      const t = parseTime(e.createdAt) || parseTime(e.updatedAt) || 0;
+      return t >= sevenDaysAgo;
+    });
+
+    const totalCount = weeklyEntries.length;
+
+    // Mood tally
+    const moodCounts: Record<string, number> = {};
+    for (const e of weeklyEntries) {
+      const rawMood = (typeof e.mood === "string" ? e.mood : e.sentiment?.tag) || "";
+      const cleanMood = rawMood.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "").trim();
+      if (cleanMood) {
+        moodCounts[cleanMood] = (moodCounts[cleanMood] || 0) + 1;
+      }
+    }
+    const moodString = Object.entries(moodCounts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([mood, count]) => `${mood} x${count}`)
+      .join(", ");
+
+    // Themes tally
+    const themeCounts: Record<string, number> = {};
+    for (const e of weeklyEntries) {
+      if (Array.isArray(e.themes)) {
+        for (const t of e.themes) {
+          if (typeof t === "string") {
+            const cleanT = t.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "").trim();
+            if (cleanT) {
+              themeCounts[cleanT] = (themeCounts[cleanT] || 0) + 1;
+            }
+          }
+        }
+      }
+    }
+    const topThemes = Object.entries(themeCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 4)
+      .map(([theme]) => theme)
+      .join(", ");
+
+    // Up to 5 titles
+    const recentTitles = weeklyEntries
+      .sort((a, b) => (parseTime(b.createdAt) || 0) - (parseTime(a.createdAt) || 0))
+      .slice(0, 5)
+      .map((e) => {
+        const rawT = typeof e.title === "string" && e.title.trim() ? e.title : "Untitled Reflection";
+        return `• ${rawT.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "").trim()}`;
+      });
+
+    const lines: string[] = [
+      "🗓️ Journal Atelier — Your week",
+      `Entries: ${totalCount}`,
+    ];
+    if (moodString) {
+      lines.push(`Moods: ${moodString}`);
+    }
+    if (topThemes) {
+      lines.push(`Themes: ${topThemes}`);
+    }
+    if (recentTitles.length > 0) {
+      lines.push(`Recent:\n${recentTitles.join("\n")}`);
+    }
+
+    const messageText = lines.join("\n\n");
+    await sendTelegram(telegramChatId, messageText);
+  } catch (err: any) {
+    console.warn("[Telegram] Outbound weekly digest delivery warning:", err?.message || err);
+  }
+
+  return res.json({ success: true });
+});
+
 // Outbound Telegram Settings Endpoints (Section 11 External Notification Security)
 app.get("/api/settings/telegram", verifyUserToken, async (req: Request, res: Response) => {
   const uid = (req as any).user?.uid;

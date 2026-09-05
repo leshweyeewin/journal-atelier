@@ -216,6 +216,52 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     });
   }, [analyzedEntries, selectedTagFilter]);
 
+  // Dedicated friendly empty state if the user has no entries yet
+  if (entries.length === 0) {
+    return (
+      <div className="flex-1 flex flex-col space-y-6 pb-12">
+        {/* Top Header */}
+        <div className="bg-white border border-stone-200/80 rounded-2xl p-5 sm:p-6 shadow-xs">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-900 flex items-center justify-center">
+              <TrendingUp className="w-4 h-4" />
+            </div>
+            <h1 className="text-xl font-semibold text-stone-900 tracking-tight">
+              Mood & Sentiment Trends
+            </h1>
+          </div>
+          <p className="text-xs sm:text-sm text-stone-500 mt-1 max-w-2xl">
+            Visualizing your longitudinal emotional landscape and sentiment patterns synthesized by the Atelier's Sentiment Analyst across your private Firestore reflections.
+          </p>
+        </div>
+
+        {/* Friendly Empty State */}
+        <div className="bg-white border border-stone-200 rounded-2xl p-10 sm:p-14 text-center space-y-4 shadow-xs">
+          <div className="w-14 h-14 rounded-2xl bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-700 mx-auto">
+            <BarChart3 className="w-7 h-7" />
+          </div>
+          <div className="max-w-md mx-auto space-y-1.5">
+            <h2 className="text-base sm:text-lg font-semibold text-stone-900">
+              No entries yet — write your first reflection
+            </h2>
+            <p className="text-xs sm:text-sm text-stone-500 leading-relaxed">
+              Write your first journal reflection and let the multi-agent brain synthesize your sentiment to see emotional trends here.
+            </p>
+          </div>
+          <button
+            id="dashboard-new-reflection-btn"
+            type="button"
+            onClick={onNewEntry}
+            className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-stone-900 text-stone-50 hover:bg-stone-800 text-xs font-medium cursor-pointer shadow-xs transition"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+            <span>Start a Reflection</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex-1 flex flex-col space-y-6 pb-12">
       {/* Top Header & Timeframe Bar */}

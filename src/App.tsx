@@ -59,6 +59,19 @@ export default function App() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [view, setView] = useState<"journal" | "studio" | "dashboard">("journal");
   const [studioToast, setStudioToast] = useState<string | null>(null);
+  const [studioIdea, setStudioIdea] = useState<ProjectIdea | null>(null);
+  const isFirstMountRef = useRef(true);
+  const lastSavedSnapshotRef = useRef<string>("");
+  const hasAutoLandedRef = useRef(false);
+
+  // Auto-collapse reflections HistorySidebar when user is not in journal view, and restore when returning
+  useEffect(() => {
+    if (view !== "journal") {
+      setIsSidebarCollapsed(true);
+    } else {
+      setIsSidebarCollapsed(false);
+    }
+  }, [view]);
 
   // Auto-dismiss studio toast
   useEffect(() => {
@@ -92,12 +105,18 @@ export default function App() {
         setInteractions([]);
         setSecurity(null);
         setIsUnlocked(false);
+        hasAutoLandedRef.current = false;
       }
       setAuthLoading(false);
     });
 
     return () => unsubscribe();
   }, []);
+
+  // Reset auto-landing flag if currentUser uid changes
+  useEffect(() => {
+    hasAutoLandedRef.current = false;
+  }, [currentUser?.uid]);
 
   // Listen to User's Isolated Firestore Interactions Subcollection
   useEffect(() => {
@@ -107,8 +126,21 @@ export default function App() {
     const unsubscribe = subscribeUserInteractions(
       currentUser.uid,
       (entries) => {
-        setInteractions(entries.filter((e) => (e as any).type !== "ideation"));
+        const validEntries = entries.filter((e) => (e as any).type !== "ideation");
+        setInteractions(validEntries);
         setListLoading(false);
+
+        // Auto-landing ONCE per sign-in:
+        // If at least one saved entry exists, land on Trends ("dashboard").
+        // If zero entries, keep view "journal" (the composer) so new users land on "start writing".
+        if (!hasAutoLandedRef.current) {
+          hasAutoLandedRef.current = true;
+          if (validEntries.length > 0) {
+            setView("dashboard");
+          } else {
+            setView("journal");
+          }
+        }
       },
       (err) => {
         console.error("Firestore subscription error:", err);
@@ -158,7 +190,9 @@ export default function App() {
     setLastSavedAt(null);
     setErrorMessage(null);
     setFailedSavePayload(null);
+    setStudioIdea(null);
     setView("journal");
+    lastSavedSnapshotRef.current = `${newId}:::[]`;
   }, []);
 
   // Extracted entry loader (shows summary level, masks raw text if locked & not unlocked)
@@ -168,8 +202,10 @@ export default function App() {
       setActiveId(entry.id);
       setTitle(entry.title || "");
       const masked = Boolean(entry.locked && !(forceUnlocked || isUnlocked));
-      setContent(masked ? "" : (entry.content || (entry as any).idea || (entry as any).oneLiner || ""));
-      setTags(Array.isArray(entry.tags) ? entry.tags : []);
+      const loadedContent = masked ? "" : (entry.content || (entry as any).idea || (entry as any).oneLiner || "");
+      setContent(loadedContent);
+      const loadedTags = Array.isArray(entry.tags) ? entry.tags : [];
+      setTags(loadedTags);
       setMode(entry.mode === "summarize" ? "reflect" : entry.mode || "reflect");
       setMessages(masked ? [] : (Array.isArray(entry.messages) ? entry.messages : []));
       setAgentLoadingState(null);
@@ -201,13 +237,21 @@ export default function App() {
       setLastSavedAt(!isNaN(parsedTime as number) ? parsedTime : null);
       setErrorMessage(null);
       setFailedSavePayload(null);
+      lastSavedSnapshotRef.current = `${entry.id}:${entry.title || ""}:${loadedContent}:${JSON.stringify(loadedTags)}`;
     },
     [isUnlocked]
   );
 
-  // Handler to select an existing reflection from history: opens immediately without forcing PIN modal
+  // Handler to select an existing reflection or saved project idea from history:
+  // If entry.projectIdea is present, route to studio directly without lock check
   const handleSelectEntry = useCallback(
     (entry: JournalInteraction) => {
+      if (entry.projectIdea) {
+        setStudioIdea(entry.projectIdea);
+        setView("studio");
+        return;
+      }
+      setStudioIdea(null);
       openEntry(entry);
       setView("journal");
     },
@@ -344,6 +388,7 @@ export default function App() {
       const saved = await saveInteraction(currentUser.uid, payloadToSave);
       setLastSavedAt(Date.now());
       setFailedSavePayload(null);
+      lastSavedSnapshotRef.current = `${activeId}:${payloadToSave.title}:${payloadToSave.content}:${JSON.stringify(payloadToSave.tags || [])}`;
       return saved;
     } catch (err: any) {
       console.error("Firestore save error:", err);
@@ -354,6 +399,50 @@ export default function App() {
       setIsSaving(false);
     }
   };
+
+  // Debounced autosave (~1800ms) for the active journal entry
+  // Security & Resilience:
+  // - Debounce ~1800ms after user stops changing title, content, or tags
+  // - Only autosaves when content.trim() is non-empty and user is signed in
+  // - SECURITY: never autosaves when active entry is locked and isUnlocked is false
+  // - Skips autosave while manual save (isSaving) is in flight to prevent write races
+  // - Reuses existing persistToFirestore(); never invokes Gemini
+  // - Does not autosave in Studio or Trends views
+  useEffect(() => {
+    // Guard the very first mount so it does not save an empty new entry
+    if (isFirstMountRef.current) {
+      isFirstMountRef.current = false;
+      return;
+    }
+
+    if (view !== "journal") return;
+    if (!currentUser) return;
+    if (!content.trim()) return;
+    if (isSaving) return;
+
+    // SECURITY: never autosave when the active entry is locked and isUnlocked is false
+    const currentActive = interactions.find((e) => e.id === activeId);
+    if (currentActive?.locked && !isUnlocked) return;
+
+    const currentSnapshot = `${activeId}:${title}:${content}:${JSON.stringify(tags)}`;
+    if (lastSavedSnapshotRef.current === currentSnapshot) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      // Re-verify guards when debounced timer fires
+      if (view !== "journal") return;
+      if (!currentUser || !content.trim()) return;
+      if (isSaving) return;
+      const active = interactions.find((e) => e.id === activeId);
+      if (active?.locked && !isUnlocked) return;
+
+      persistToFirestore();
+      lastSavedSnapshotRef.current = currentSnapshot;
+    }, 1800);
+
+    return () => clearTimeout(timer);
+  }, [title, content, tags]);
 
   // Tag management handlers with immediate Firestore persistence for active entries
   const handleAddTag = async (tagText: string) => {
@@ -592,7 +681,12 @@ export default function App() {
         isTelegramConnected={isTelegramConnected}
         onOpenTelegramSettings={() => setIsTelegramModalOpen(true)}
         view={view}
-        onNavigate={setView}
+        onNavigate={(newView) => {
+          if (newView !== "studio") {
+            setStudioIdea(null);
+          }
+          setView(newView);
+        }}
       />
 
       {/* Main App Layout */}
@@ -614,7 +708,11 @@ export default function App() {
         {/* Main Stage: Active Journal Atelier, Project Studio, or Dashboard Trends */}
         <main className="flex-1 p-4 sm:p-6 overflow-y-auto flex flex-col">
           {view === "studio" ? (
-            <ProjectStudio onSaveIdea={handleSaveIdea} />
+            <ProjectStudio
+              onSaveIdea={handleSaveIdea}
+              initialIdea={studioIdea}
+              onClearInitialIdea={() => setStudioIdea(null)}
+            />
           ) : view === "dashboard" ? (
             <DashboardView
               entries={interactions}

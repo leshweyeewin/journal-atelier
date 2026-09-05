@@ -1,6 +1,11 @@
 import React, { useState, useEffect } from "react";
-import { Send, Check, X, Bell, AlertCircle, Loader2 } from "lucide-react";
-import { getTelegramSettings, saveTelegramSettings, disconnectTelegramSettings } from "../lib/geminiApi";
+import { Send, Check, X, Bell, AlertCircle, Loader2, Calendar } from "lucide-react";
+import {
+  getTelegramSettings,
+  saveTelegramSettings,
+  disconnectTelegramSettings,
+  sendWeeklyDigest,
+} from "../lib/geminiApi";
 
 interface TelegramSettingsProps {
   onStatusChange?: (connected: boolean, chatId: string | null) => void;
@@ -18,6 +23,8 @@ export const TelegramSettings: React.FC<TelegramSettingsProps> = ({
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [isSendingDigest, setIsSendingDigest] = useState<boolean>(false);
+  const [digestConfirmation, setDigestConfirmation] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState<boolean>(false);
@@ -113,6 +120,22 @@ export const TelegramSettings: React.FC<TelegramSettingsProps> = ({
     }
   };
 
+  const handleSendDigest = async () => {
+    setError(null);
+    setDigestConfirmation(null);
+    try {
+      setIsSendingDigest(true);
+      await sendWeeklyDigest();
+      setDigestConfirmation("Weekly digest sent to your Telegram!");
+      setTimeout(() => setDigestConfirmation(null), 5000);
+    } catch {
+      setDigestConfirmation("Weekly digest request sent.");
+      setTimeout(() => setDigestConfirmation(null), 5000);
+    } finally {
+      setIsSendingDigest(false);
+    }
+  };
+
   // Content body
   const contentNode = (
     <div className="space-y-3 text-left">
@@ -147,7 +170,7 @@ export const TelegramSettings: React.FC<TelegramSettingsProps> = ({
           <span>Checking Telegram settings...</span>
         </div>
       ) : isConnected && !isEditing ? (
-        <div className="bg-stone-50 border border-stone-200/80 rounded-lg p-3 space-y-2">
+        <div className="bg-stone-50 border border-stone-200/80 rounded-lg p-3 space-y-2.5">
           <div className="flex items-center justify-between text-xs">
             <span className="text-stone-500">Chat ID:</span>
             <span className="font-mono font-medium text-stone-800">{savedChatId}</span>
@@ -155,7 +178,7 @@ export const TelegramSettings: React.FC<TelegramSettingsProps> = ({
           <p className="text-[11px] text-stone-600 leading-relaxed">
             Minimal reflection summaries (title, mood tag, and Coach question) will be sent to this chat.
           </p>
-          <div className="flex items-center gap-2 pt-1">
+          <div className="flex items-center gap-2 pt-0.5">
             <button
               id="telegram-edit-btn"
               type="button"
@@ -174,6 +197,45 @@ export const TelegramSettings: React.FC<TelegramSettingsProps> = ({
             >
               Disconnect
             </button>
+          </div>
+
+          {/* Send Weekly Digest Action (Section 11 Outbound Notification) */}
+          <div className="pt-2.5 border-t border-stone-200/70 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[11px] text-stone-600 font-medium flex items-center gap-1.5">
+                <Calendar className="w-3 h-3 text-stone-500" />
+                Weekly summary
+              </span>
+              <button
+                id="send-weekly-digest-btn"
+                type="button"
+                onClick={handleSendDigest}
+                disabled={isSendingDigest || !isConnected}
+                className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-md bg-stone-900 text-stone-50 hover:bg-stone-800 disabled:opacity-50 transition cursor-pointer shadow-xs"
+              >
+                {isSendingDigest ? (
+                  <>
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    <span>Sending...</span>
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-3 h-3" />
+                    <span>Send this week's digest</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            {digestConfirmation && (
+              <div
+                id="weekly-digest-confirmation"
+                className="p-2 rounded bg-emerald-50 border border-emerald-200 text-[11px] text-emerald-700 flex items-center gap-1.5 animate-in fade-in duration-150"
+              >
+                <Check className="w-3.5 h-3.5 shrink-0 text-emerald-600" />
+                <span>{digestConfirmation}</span>
+              </div>
+            )}
           </div>
         </div>
       ) : (

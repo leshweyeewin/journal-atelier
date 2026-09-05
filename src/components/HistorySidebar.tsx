@@ -175,10 +175,18 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
                   <h3 className="text-xs font-semibold truncate flex-1 text-stone-900">
                     {cardTitle}
                   </h3>
-                  <span className="text-[10px] text-stone-400 shrink-0 flex items-center gap-1">
-                    <Calendar className="w-2.5 h-2.5" />
-                    {formatDate(entry.updatedAt)}
-                  </span>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {entry.projectIdea && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-amber-100/80 text-amber-900 border border-amber-300/70">
+                        <Sparkles className="w-2.5 h-2.5 text-amber-600 shrink-0" />
+                        <span>Project</span>
+                      </span>
+                    )}
+                    <span className="text-[10px] text-stone-400 flex items-center gap-1">
+                      <Calendar className="w-2.5 h-2.5" />
+                      {formatDate(entry.updatedAt)}
+                    </span>
+                  </div>
                 </div>
 
                 <p className={`text-[11px] line-clamp-2 mb-2 leading-relaxed ${isMasked && !entry.reflection ? "text-stone-400 italic" : "text-stone-500"}`}>

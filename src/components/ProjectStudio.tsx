@@ -27,17 +27,40 @@ const IDEATION_STAGES = [
 
 interface ProjectStudioProps {
   onSaveIdea?: (idea: ProjectIdea) => Promise<void> | void;
+  initialIdea?: ProjectIdea | null;
+  onClearInitialIdea?: () => void;
 }
 
-export const ProjectStudio: React.FC<ProjectStudioProps> = ({ onSaveIdea }) => {
+export const ProjectStudio: React.FC<ProjectStudioProps> = ({
+  onSaveIdea,
+  initialIdea,
+  onClearInitialIdea,
+}) => {
   const [seed, setSeed] = useState("");
   const [loading, setLoading] = useState(false);
   const [stageIndex, setStageIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<IdeateResponse | null>(null);
+  const [result, setResult] = useState<ProjectIdea | null>(null);
   const [lastCallSeed, setLastCallSeed] = useState<string>("");
   const [copied, setCopied] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  // Sync initialIdea into active result whenever initialIdea changes
+  useEffect(() => {
+    if (initialIdea) {
+      setResult(initialIdea);
+      setError(null);
+    }
+  }, [initialIdea]);
+
+  const handleStartNewIdea = () => {
+    setResult(null);
+    setSeed("");
+    setError(null);
+    if (onClearInitialIdea) {
+      onClearInitialIdea();
+    }
+  };
 
   // Staged advancing status that mirrors the real agent order
   useEffect(() => {
@@ -56,6 +79,9 @@ export const ProjectStudio: React.FC<ProjectStudioProps> = ({ onSaveIdea }) => {
     setLoading(true);
     setError(null);
     setLastCallSeed(inputSeed);
+    if (onClearInitialIdea) {
+      onClearInitialIdea();
+    }
     try {
       const data = await ideate(inputSeed);
       setResult(data);
@@ -66,15 +92,17 @@ export const ProjectStudio: React.FC<ProjectStudioProps> = ({ onSaveIdea }) => {
     }
   };
 
+  const activeIdea = result || initialIdea;
+
   const handleDownloadSpec = () => {
-    if (!result) return;
-    const md = buildProjectSpecMarkdown(result);
-    downloadTextFile(`${slugify(result.title || "project")}-build-spec.md`, md);
+    if (!activeIdea) return;
+    const md = buildProjectSpecMarkdown(activeIdea);
+    downloadTextFile(`${slugify(activeIdea.title || "project")}-build-spec.md`, md);
   };
 
   const handleCopySpec = async () => {
-    if (!result) return;
-    const ok = await copyText(buildProjectSpecMarkdown(result));
+    if (!activeIdea) return;
+    const ok = await copyText(buildProjectSpecMarkdown(activeIdea));
     if (ok) {
       setCopied(true);
       setTimeout(() => setCopied(false), 1800);
@@ -82,109 +110,141 @@ export const ProjectStudio: React.FC<ProjectStudioProps> = ({ onSaveIdea }) => {
   };
 
   const handleSave = async () => {
-    if (!result || !onSaveIdea) return;
+    if (!activeIdea || !onSaveIdea) return;
     setSaving(true);
     try {
-      await onSaveIdea(result);
+      await onSaveIdea(activeIdea);
     } finally {
       setSaving(false);
     }
   };
 
-  const hasIdeaCard = Boolean(result?.title || result?.oneLiner || result?.idea);
+  const hasIdeaCard = Boolean(activeIdea?.title || activeIdea?.oneLiner || activeIdea?.idea);
   const hasCapabilitiesCard = Boolean(
-    result?.capabilities && result.capabilities.length > 0
+    activeIdea?.capabilities && activeIdea.capabilities.length > 0
   );
   const hasBlueprintCard = Boolean(
-    (result?.stack && result.stack.length > 0) ||
-      (result?.uiComponents && result.uiComponents.length > 0) ||
-      (result?.infra && result.infra.length > 0) ||
-      result?.dataFlow ||
-      (result?.milestones && result.milestones.length > 0)
+    (activeIdea?.stack && activeIdea.stack.length > 0) ||
+      (activeIdea?.uiComponents && activeIdea.uiComponents.length > 0) ||
+      (activeIdea?.infra && activeIdea.infra.length > 0) ||
+      activeIdea?.dataFlow ||
+      (activeIdea?.milestones && activeIdea.milestones.length > 0)
   );
   const hasNextStepsCard = Boolean(
-    (result?.risks && result.risks.length > 0) || result?.firstStep
+    (activeIdea?.risks && activeIdea.risks.length > 0) || activeIdea?.firstStep
   );
 
   return (
     <div className="w-full max-w-4xl mx-auto space-y-6 pb-12">
-      {/* Studio Header */}
-      <div className="rounded-2xl border border-stone-200 bg-white p-5 sm:p-6 shadow-xs">
-        <div className="flex items-center gap-2.5 mb-1.5">
-          <div className="w-9 h-9 rounded-xl bg-amber-100/80 text-amber-700 flex items-center justify-center border border-amber-200/60">
-            <Sparkles className="w-5 h-5" />
-          </div>
-          <div>
-            <h1 className="text-xl sm:text-2xl font-bold text-stone-900 tracking-tight">
-              AI Project Studio
-            </h1>
-            <p className="text-xs sm:text-sm text-stone-500">
-              Brainstorm your next Gemini-powered build.
-            </p>
-          </div>
-        </div>
-
-        {/* Prompt Input Form */}
-        <div className="mt-4 space-y-3">
-          <textarea
-            id="studio-seed-input"
-            value={seed}
-            onChange={(e) => setSeed(e.target.value)}
-            disabled={loading}
-            placeholder="Optional: a theme, domain, or vibe… leave blank to surprise me"
-            rows={3}
-            className="w-full p-3.5 rounded-xl border border-stone-300 focus:border-amber-500 focus:ring-2 focus:ring-amber-200/50 outline-none text-sm text-stone-800 placeholder:text-stone-400 resize-none transition bg-stone-50/50 disabled:opacity-60 disabled:cursor-not-allowed"
-          />
-
-          <div className="flex flex-wrap items-center gap-3">
-            <button
-              id="studio-generate-btn"
-              type="button"
-              disabled={loading || !seed.trim()}
-              title={!seed.trim() ? "Enter a seed idea, or hit Surprise Me for a random one" : "Generate an idea from your seed"}
-              onClick={() => handleGenerate(seed)}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-stone-900 text-stone-50 text-xs sm:text-sm font-medium hover:bg-stone-800 active:scale-[0.98] transition shadow-xs disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
-            >
-              {loading ? (
-                <Loader2 className="w-4 h-4 animate-spin text-amber-400" />
-              ) : (
-                <Wand2 className="w-4 h-4 text-amber-400" />
-              )}
-              <span>Generate Idea</span>
-            </button>
-
-            <button
-              id="studio-surprise-btn"
-              type="button"
-              disabled={loading}
-              onClick={() => handleGenerate("")}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-amber-300/80 bg-amber-50/70 text-amber-900 text-xs sm:text-sm font-medium hover:bg-amber-100 active:scale-[0.98] transition shadow-xs disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
-            >
-              <Sparkles className="w-4 h-4 text-amber-600" />
-              <span>Surprise Me</span>
-            </button>
-          </div>
-
-          {!seed.trim() && !loading && (
-            <p className="text-[11px] text-stone-400">
-              Type a theme above to shape the idea, or hit <span className="font-medium text-amber-700">Surprise Me</span> for a random one.
-            </p>
-          )}
-
-          {/* Loading Indicator */}
-          {loading && (
-            <div className="flex items-center justify-between text-xs sm:text-sm text-amber-900 bg-amber-50/90 border border-amber-200/80 rounded-xl px-4 py-3 shadow-xs animate-pulse">
-              <div className="flex items-center gap-2.5">
-                <Loader2 className="w-4 h-4 animate-spin text-amber-600 shrink-0" />
-                <span className="font-medium">{IDEATION_STAGES[stageIndex]}</span>
-              </div>
-              <span className="text-[11px] text-amber-700/80 font-mono shrink-0">
-                (step {stageIndex + 1} of {IDEATION_STAGES.length})
-              </span>
+      {/* Studio Header: Shows either active saved idea banner or generator form */}
+      {initialIdea ? (
+        <div className="rounded-2xl border border-stone-200 bg-white p-5 sm:p-6 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-100/80 text-amber-700 flex items-center justify-center border border-amber-200/60 shrink-0">
+              <Sparkles className="w-5 h-5" />
             </div>
-          )}
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-xl sm:text-2xl font-bold text-stone-900 tracking-tight">
+                  Saved Project Idea
+                </h1>
+                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300/70">
+                  From History
+                </span>
+              </div>
+              <p className="text-xs sm:text-sm text-stone-500">
+                Viewing saved build concept from your history.
+              </p>
+            </div>
+          </div>
+          <button
+            id="studio-start-new-btn"
+            type="button"
+            onClick={handleStartNewIdea}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-stone-900 text-stone-50 text-xs sm:text-sm font-medium hover:bg-stone-800 active:scale-[0.98] transition shadow-xs cursor-pointer self-start sm:self-auto"
+          >
+            <Wand2 className="w-4 h-4 text-amber-400" />
+            <span>Start a new idea</span>
+          </button>
         </div>
-      </div>
+      ) : (
+        <div className="rounded-2xl border border-stone-200 bg-white p-5 sm:p-6 shadow-xs">
+          <div className="flex items-center gap-2.5 mb-1.5">
+            <div className="w-9 h-9 rounded-xl bg-amber-100/80 text-amber-700 flex items-center justify-center border border-amber-200/60">
+              <Sparkles className="w-5 h-5" />
+            </div>
+            <div>
+              <h1 className="text-xl sm:text-2xl font-bold text-stone-900 tracking-tight">
+                AI Project Studio
+              </h1>
+              <p className="text-xs sm:text-sm text-stone-500">
+                Brainstorm your next Gemini-powered build.
+              </p>
+            </div>
+          </div>
+
+          {/* Prompt Input Form */}
+          <div className="mt-4 space-y-3">
+            <textarea
+              id="studio-seed-input"
+              value={seed}
+              onChange={(e) => setSeed(e.target.value)}
+              disabled={loading}
+              placeholder="Optional: a theme, domain, or vibe… leave blank to surprise me"
+              rows={3}
+              className="w-full p-3.5 rounded-xl border border-stone-300 focus:border-amber-500 focus:ring-2 focus:ring-amber-200/50 outline-none text-sm text-stone-800 placeholder:text-stone-400 resize-none transition bg-stone-50/50 disabled:opacity-60 disabled:cursor-not-allowed"
+            />
+
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                id="studio-generate-btn"
+                type="button"
+                disabled={loading || !seed.trim()}
+                title={!seed.trim() ? "Enter a seed idea, or hit Surprise Me for a random one" : "Generate an idea from your seed"}
+                onClick={() => handleGenerate(seed)}
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-stone-900 text-stone-50 text-xs sm:text-sm font-medium hover:bg-stone-800 active:scale-[0.98] transition shadow-xs disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
+              >
+                {loading ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-amber-400" />
+                ) : (
+                  <Wand2 className="w-4 h-4 text-amber-400" />
+                )}
+                <span>Generate Idea</span>
+              </button>
+
+              <button
+                id="studio-surprise-btn"
+                type="button"
+                disabled={loading}
+                onClick={() => handleGenerate("")}
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-amber-300/80 bg-amber-50/70 text-amber-900 text-xs sm:text-sm font-medium hover:bg-amber-100 active:scale-[0.98] transition shadow-xs disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
+              >
+                <Sparkles className="w-4 h-4 text-amber-600" />
+                <span>Surprise Me</span>
+              </button>
+            </div>
+
+            {!seed.trim() && !loading && (
+              <p className="text-[11px] text-stone-400">
+                Type a theme above to shape the idea, or hit <span className="font-medium text-amber-700">Surprise Me</span> for a random one.
+              </p>
+            )}
+
+            {/* Loading Indicator */}
+            {loading && (
+              <div className="flex items-center justify-between text-xs sm:text-sm text-amber-900 bg-amber-50/90 border border-amber-200/80 rounded-xl px-4 py-3 shadow-xs animate-pulse">
+                <div className="flex items-center gap-2.5">
+                  <Loader2 className="w-4 h-4 animate-spin text-amber-600 shrink-0" />
+                  <span className="font-medium">{IDEATION_STAGES[stageIndex]}</span>
+                </div>
+                <span className="text-[11px] text-amber-700/80 font-mono shrink-0">
+                  (step {stageIndex + 1} of {IDEATION_STAGES.length})
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Error Banner with Retry */}
       {error && (
@@ -197,9 +257,9 @@ export const ProjectStudio: React.FC<ProjectStudioProps> = ({ onSaveIdea }) => {
       )}
 
       {/* Results Region - Graceful Degradation */}
-      {result && !loading && (
+      {activeIdea && !loading && (
         <div className="space-y-6 animate-fadeIn">
-          {/* Actions: save + portable build spec export */}
+          {/* Actions: save + portable build spec export + start new */}
           <div className="rounded-2xl border border-stone-200 bg-white p-4 sm:p-5 shadow-xs flex flex-wrap items-center gap-2.5">
             <span className="text-xs font-semibold text-stone-600 mr-1">Do more with this idea:</span>
 
@@ -212,7 +272,7 @@ export const ProjectStudio: React.FC<ProjectStudioProps> = ({ onSaveIdea }) => {
                 className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-stone-900 text-stone-50 text-xs font-medium hover:bg-stone-800 active:scale-[0.98] transition disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
               >
                 <Save className="w-3.5 h-3.5 text-amber-400" />
-                <span>{saving ? "Saving…" : "Save to history"}</span>
+                <span>{saving ? "Saving…" : initialIdea ? "Re-save to history" : "Save to history"}</span>
               </button>
             )}
 
@@ -238,6 +298,18 @@ export const ProjectStudio: React.FC<ProjectStudioProps> = ({ onSaveIdea }) => {
               <span>{copied ? "Copied" : "Copy spec"}</span>
             </button>
 
+            {initialIdea && (
+              <button
+                id="studio-start-new-action-btn"
+                type="button"
+                onClick={handleStartNewIdea}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-stone-300 bg-white text-stone-800 text-xs font-medium hover:bg-stone-50 active:scale-[0.98] transition cursor-pointer"
+              >
+                <Wand2 className="w-3.5 h-3.5 text-amber-600" />
+                <span>Start a new idea</span>
+              </button>
+            )}
+
             <span className="w-full sm:w-auto sm:ml-auto text-[11px] text-stone-400">
               Build it in Gemini, Claude, or a local model (Ollama).
             </span>
@@ -254,21 +326,21 @@ export const ProjectStudio: React.FC<ProjectStudioProps> = ({ onSaveIdea }) => {
                 <span>Project Concept</span>
               </div>
 
-              {result.title && (
+              {activeIdea.title && (
                 <h2 className="text-xl sm:text-2xl font-bold text-stone-900 tracking-tight leading-snug">
-                  {result.title}
+                  {activeIdea.title}
                 </h2>
               )}
 
-              {result.oneLiner && (
+              {activeIdea.oneLiner && (
                 <p className="text-sm sm:text-base italic text-amber-800 font-medium border-l-2 border-amber-400 pl-3 py-0.5">
-                  {result.oneLiner}
+                  {activeIdea.oneLiner}
                 </p>
               )}
 
-              {result.idea && (
+              {activeIdea.idea && (
                 <p className="text-sm sm:text-base text-stone-700 leading-relaxed pt-1">
-                  {result.idea}
+                  {activeIdea.idea}
                 </p>
               )}
             </div>
@@ -288,7 +360,7 @@ export const ProjectStudio: React.FC<ProjectStudioProps> = ({ onSaveIdea }) => {
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2">
-                {result.capabilities?.map((cap, idx) => {
+                {activeIdea.capabilities?.map((cap, idx) => {
                   const isSafeHttpsDocUrl =
                     typeof cap.docUrl === "string" &&
                     cap.docUrl.startsWith("https://") &&
@@ -342,13 +414,13 @@ export const ProjectStudio: React.FC<ProjectStudioProps> = ({ onSaveIdea }) => {
 
               {/* Three Chip/Pill Sections */}
               <div className="space-y-4">
-                {result.stack && result.stack.length > 0 && (
+                {activeIdea.stack && activeIdea.stack.length > 0 && (
                   <div>
                     <span className="text-xs font-semibold text-stone-600 uppercase tracking-wider block mb-2">
                       Tech Stack
                     </span>
                     <div className="flex flex-wrap gap-1.5">
-                      {result.stack.map((item, idx) => (
+                      {activeIdea.stack.map((item, idx) => (
                         <span
                           key={idx}
                           className="px-2.5 py-1 text-xs font-medium rounded-lg bg-stone-100 text-stone-700 border border-stone-200"
@@ -360,13 +432,13 @@ export const ProjectStudio: React.FC<ProjectStudioProps> = ({ onSaveIdea }) => {
                   </div>
                 )}
 
-                {result.uiComponents && result.uiComponents.length > 0 && (
+                {activeIdea.uiComponents && activeIdea.uiComponents.length > 0 && (
                   <div>
                     <span className="text-xs font-semibold text-stone-600 uppercase tracking-wider block mb-2">
                       UI Components
                     </span>
                     <div className="flex flex-wrap gap-1.5">
-                      {result.uiComponents.map((item, idx) => (
+                      {activeIdea.uiComponents.map((item, idx) => (
                         <span
                           key={idx}
                           className="px-2.5 py-1 text-xs font-medium rounded-lg bg-amber-50 text-amber-800 border border-amber-200/80"
@@ -378,13 +450,13 @@ export const ProjectStudio: React.FC<ProjectStudioProps> = ({ onSaveIdea }) => {
                   </div>
                 )}
 
-                {result.infra && result.infra.length > 0 && (
+                {activeIdea.infra && activeIdea.infra.length > 0 && (
                   <div>
                     <span className="text-xs font-semibold text-stone-600 uppercase tracking-wider block mb-2">
                       Infra & Compute
                     </span>
                     <div className="flex flex-wrap gap-1.5">
-                      {result.infra.map((item, idx) => (
+                      {activeIdea.infra.map((item, idx) => (
                         <span
                           key={idx}
                           className="px-2.5 py-1 text-xs font-medium rounded-lg bg-stone-100 text-stone-700 border border-stone-200"
@@ -398,19 +470,19 @@ export const ProjectStudio: React.FC<ProjectStudioProps> = ({ onSaveIdea }) => {
               </div>
 
               {/* Data Flow */}
-              {result.dataFlow && (
+              {activeIdea.dataFlow && (
                 <div className="pt-2 border-t border-stone-100">
                   <span className="text-xs font-semibold text-stone-600 uppercase tracking-wider block mb-1.5">
                     Data Flow
                   </span>
                   <p className="text-xs sm:text-sm text-stone-700 leading-relaxed">
-                    {result.dataFlow}
+                    {activeIdea.dataFlow}
                   </p>
                 </div>
               )}
 
               {/* Milestones */}
-              {result.milestones && result.milestones.length > 0 && (
+              {activeIdea.milestones && activeIdea.milestones.length > 0 && (
                 <div className="pt-2 border-t border-stone-100">
                   <div className="flex items-center gap-1.5 mb-2">
                     <ListChecks className="w-4 h-4 text-stone-500" />
@@ -419,7 +491,7 @@ export const ProjectStudio: React.FC<ProjectStudioProps> = ({ onSaveIdea }) => {
                     </span>
                   </div>
                   <ol className="space-y-1.5 text-xs sm:text-sm text-stone-700 list-decimal list-inside pl-1">
-                    {result.milestones.map((m, idx) => (
+                    {activeIdea.milestones.map((m, idx) => (
                       <li key={idx} className="leading-relaxed">
                         <span className="ml-1">{m}</span>
                       </li>
@@ -443,7 +515,7 @@ export const ProjectStudio: React.FC<ProjectStudioProps> = ({ onSaveIdea }) => {
                 </h3>
               </div>
 
-              {result.risks && result.risks.length > 0 && (
+              {activeIdea.risks && activeIdea.risks.length > 0 && (
                 <div className="space-y-1.5">
                   <div className="flex items-center gap-1.5 text-amber-800">
                     <AlertTriangle className="w-4 h-4 text-amber-600" />
@@ -452,7 +524,7 @@ export const ProjectStudio: React.FC<ProjectStudioProps> = ({ onSaveIdea }) => {
                     </span>
                   </div>
                   <ul className="space-y-1 text-xs sm:text-sm text-stone-600 list-disc list-inside pl-1">
-                    {result.risks.map((risk, idx) => (
+                    {activeIdea.risks.map((risk, idx) => (
                       <li key={idx} className="leading-relaxed">
                         <span className="ml-1">{risk}</span>
                       </li>
@@ -461,13 +533,13 @@ export const ProjectStudio: React.FC<ProjectStudioProps> = ({ onSaveIdea }) => {
                 </div>
               )}
 
-              {result.firstStep && (
+              {activeIdea.firstStep && (
                 <div className="rounded-xl border border-amber-200/90 bg-amber-50/70 p-4 space-y-1">
                   <span className="text-xs font-semibold text-amber-900 uppercase tracking-wider block">
                     First Actionable Step
                   </span>
                   <p className="text-xs sm:text-sm text-stone-800 font-medium leading-relaxed">
-                    {result.firstStep}
+                    {activeIdea.firstStep}
                   </p>
                 </div>
               )}
@@ -475,9 +547,9 @@ export const ProjectStudio: React.FC<ProjectStudioProps> = ({ onSaveIdea }) => {
           )}
 
           {/* Footer with Model Name */}
-          {result.modelUsed && (
+          {activeIdea.modelUsed && (
             <div className="text-center text-xs text-stone-400 py-1">
-              Generated with {result.modelUsed}
+              Generated with {activeIdea.modelUsed}
             </div>
           )}
         </div>
