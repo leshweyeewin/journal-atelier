@@ -156,6 +156,38 @@ export async function ideate(seed: string): Promise<IdeateResponse> {
   return await response.json();
 }
 
+export async function refineIdea(
+  existing: ProjectIdea,
+  instruction: string
+): Promise<ProjectIdea> {
+  const token = await getIdToken();
+  if (!token) {
+    throw new Error("Authentication session expired. Please sign in again.");
+  }
+  const response = await fetch("/api/ideate/refine", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      existingIdea: existing,
+      instruction,
+    }),
+  });
+  if (!response.ok) {
+    let errorMsg = "Failed to refine project idea.";
+    try {
+      const j = await response.json();
+      if (j.error) errorMsg = j.error;
+    } catch {
+      errorMsg = `Server returned error status ${response.status}`;
+    }
+    throw new Error(errorMsg);
+  }
+  return await response.json();
+}
+
 export interface TelegramSettingsResponse {
   telegramChatId: string | null;
   connected: boolean;

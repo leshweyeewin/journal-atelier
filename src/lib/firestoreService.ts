@@ -81,6 +81,24 @@ export async function saveInteraction(
 }
 
 /**
+ * Update specific fields in an existing interaction document without overwriting or duplicating.
+ * Strips undefined and merges into the existing Firestore document at users/{userId}/interactions/{id}.
+ */
+export async function updateInteraction(
+  userId: string,
+  id: string,
+  patch: Partial<JournalInteraction>
+): Promise<void> {
+  if (!userId || !id) return;
+  const cleanPayload = sanitizeForFirestore({
+    ...patch,
+    updatedAt: Date.now(),
+  });
+  const docRef = doc(db, "users", userId, "interactions", id);
+  await setDoc(docRef, cleanPayload, { merge: true });
+}
+
+/**
  * Real-time listener for user's reflection entries, strictly scoped to userId
  */
 export function subscribeUserInteractions(

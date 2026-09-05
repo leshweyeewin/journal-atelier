@@ -12,8 +12,11 @@ import {
   Copy,
   Check,
   Save,
+  Edit3,
+  X,
+  FileText,
 } from "lucide-react";
-import { ideate, IdeateResponse } from "../lib/geminiApi";
+import { ideate, refineIdea, IdeateResponse } from "../lib/geminiApi";
 import { ProjectIdea } from "../types";
 import { buildProjectSpecMarkdown, slugify, downloadTextFile, copyText } from "../lib/buildSpec";
 import { ErrorBanner } from "./ErrorBanner";
@@ -27,12 +30,14 @@ const IDEATION_STAGES = [
 
 interface ProjectStudioProps {
   onSaveIdea?: (idea: ProjectIdea) => Promise<void> | void;
+  onUpdateIdea?: (id: string, patch: Partial<ProjectIdea>) => Promise<void> | void;
   initialIdea?: ProjectIdea | null;
   onClearInitialIdea?: () => void;
 }
 
 export const ProjectStudio: React.FC<ProjectStudioProps> = ({
   onSaveIdea,
+  onUpdateIdea,
   initialIdea,
   onClearInitialIdea,
 }) => {
@@ -45,11 +50,35 @@ export const ProjectStudio: React.FC<ProjectStudioProps> = ({
   const [copied, setCopied] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  // Edit Mode state
+  const [isEditing, setIsEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState("");
+  const [editOneLiner, setEditOneLiner] = useState("");
+  const [editFirstStep, setEditFirstStep] = useState("");
+  const [editNotes, setEditNotes] = useState("");
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saved" | "error">("idle");
+
+  // Refine / expand state
+  const [isRefiningOpen, setIsRefiningOpen] = useState(false);
+  const [refineInstruction, setRefineInstruction] = useState("");
+  const [refining, setRefining] = useState(false);
+  const [refineError, setRefineError] = useState<string | null>(null);
+  const [pendingRefinedIdea, setPendingRefinedIdea] = useState<ProjectIdea | null>(null);
+
   // Sync initialIdea into active result whenever initialIdea changes
   useEffect(() => {
     if (initialIdea) {
       setResult(initialIdea);
       setError(null);
+      setIsEditing(false);
+      setEditTitle(initialIdea.title || "");
+      setEditOneLiner(initialIdea.oneLiner || "");
+      setEditFirstStep(initialIdea.firstStep || "");
+      setEditNotes(initialIdea.notes || "");
+      setSaveStatus("idle");
+      setPendingRefinedIdea(null);
+      setIsRefiningOpen(false);
     }
   }, [initialIdea]);
 
@@ -57,6 +86,9 @@ export const ProjectStudio: React.FC<ProjectStudioProps> = ({
     setResult(null);
     setSeed("");
     setError(null);
+    setIsEditing(false);
+    setPendingRefinedIdea(null);
+    setIsRefiningOpen(false);
     if (onClearInitialIdea) {
       onClearInitialIdea();
     }
@@ -79,12 +111,19 @@ export const ProjectStudio: React.FC<ProjectStudioProps> = ({
     setLoading(true);
     setError(null);
     setLastCallSeed(inputSeed);
+    setIsEditing(false);
+    setPendingRefinedIdea(null);
+    setIsRefiningOpen(false);
     if (onClearInitialIdea) {
       onClearInitialIdea();
     }
     try {
       const data = await ideate(inputSeed);
       setResult(data);
+      setEditTitle(data.title || "");
+      setEditOneLiner(data.oneLiner || "");
+      setEditFirstStep(data.firstStep || "");
+      setEditNotes(data.notes || "");
     } catch (err: any) {
       setError(err?.message || "Failed to generate project idea.");
     } finally {
@@ -114,9 +153,96 @@ export const ProjectStudio: React.FC<ProjectStudioProps> = ({
     setSaving(true);
     try {
       await onSaveIdea(activeIdea);
+      setSaveStatus("saved");
+      setTimeout(() => setSaveStatus("idle"), 2500);
     } finally {
       setSaving(false);
     }
+  };
+
+  // Save changes from Edit mode back to the SAME Firestore document
+  const handleSaveEditedIdea = async () => {
+    const targetId = initialIdea?.id || activeIdea?.id;
+    setIsUpdating(true);
+    try {
+      const patch: Partial<ProjectIdea> = {
+        title: editTitle.trim() || activeIdea?.title,
+        oneLiner: editOneLiner.trim() || activeIdea?.oneLiner,
+        firstStep: editFirstStep.trim() || activeIdea?.firstStep,
+        notes: editNotes.trim(),
+      };
+
+      if (targetId && onUpdateIdea) {
+        await onUpdateIdea(targetId, patch);
+      } else if (onSaveIdea && activeIdea) {
+        await onSaveIdea({ ...activeIdea, ...patch });
+      }
+
+      setResult((prev) => (prev ? { ...prev, ...patch } : { ...activeIdea, ...patch }));
+      setSaveStatus("saved");
+      setTimeout(() => setSaveStatus("idle"), 2500);
+      setIsEditing(false);
+    } catch (err: any) {
+      console.error("Failed to update idea:", err);
+      setSaveStatus("error");
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  // Refine & expand idea action
+  const handleRefineIdea = async () => {
+    if (!activeIdea) return;
+    setRefining(true);
+    setRefineError(null);
+    try {
+      const improved = await refineIdea(activeIdea, refineInstruction);
+      setPendingRefinedIdea(improved);
+      setResult(improved);
+      setEditTitle(improved.title || "");
+      setEditOneLiner(improved.oneLiner || "");
+      setEditFirstStep(improved.firstStep || "");
+      setEditNotes(improved.notes || "");
+      setIsRefiningOpen(false);
+    } catch (err: any) {
+      setRefineError(err?.message || "Failed to refine project idea.");
+    } finally {
+      setRefining(false);
+    }
+  };
+
+  // Commit refined idea to the same Firestore doc
+  const handleSaveRefined = async () => {
+    if (!pendingRefinedIdea) return;
+    const targetId = initialIdea?.id || activeIdea?.id;
+    setIsUpdating(true);
+    try {
+      if (targetId && onUpdateIdea) {
+        await onUpdateIdea(targetId, pendingRefinedIdea);
+      } else if (onSaveIdea) {
+        await onSaveIdea(pendingRefinedIdea);
+      }
+      setResult(pendingRefinedIdea);
+      setPendingRefinedIdea(null);
+      setSaveStatus("saved");
+      setTimeout(() => setSaveStatus("idle"), 2500);
+    } catch (err: any) {
+      console.error("Failed to save refined idea:", err);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  // Discard refined proposal
+  const handleDiscardRefined = () => {
+    if (initialIdea) {
+      setResult(initialIdea);
+      setEditTitle(initialIdea.title || "");
+      setEditOneLiner(initialIdea.oneLiner || "");
+      setEditFirstStep(initialIdea.firstStep || "");
+      setEditNotes(initialIdea.notes || "");
+    }
+    setPendingRefinedIdea(null);
   };
 
   const hasIdeaCard = Boolean(activeIdea?.title || activeIdea?.oneLiner || activeIdea?.idea);
@@ -259,11 +385,101 @@ export const ProjectStudio: React.FC<ProjectStudioProps> = ({
       {/* Results Region - Graceful Degradation */}
       {activeIdea && !loading && (
         <div className="space-y-6 animate-fadeIn">
-          {/* Actions: save + portable build spec export + start new */}
-          <div className="rounded-2xl border border-stone-200 bg-white p-4 sm:p-5 shadow-xs flex flex-wrap items-center gap-2.5">
-            <span className="text-xs font-semibold text-stone-600 mr-1">Do more with this idea:</span>
+          {/* Refined Proposal Review Banner */}
+          {pendingRefinedIdea && (
+            <div
+              id="studio-refined-review-banner"
+              className="rounded-2xl border border-amber-300 bg-amber-50/90 p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fadeIn"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-amber-200/80 text-amber-800 flex items-center justify-center shrink-0">
+                  <Sparkles className="w-4 h-4 text-amber-800" />
+                </div>
+                <div>
+                  <div className="text-sm font-semibold text-stone-900">
+                    Refined version ready for review
+                  </div>
+                  <p className="text-xs text-stone-600">
+                    Inspecting refined blueprint with Gemini. Save changes to update your history document or discard.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 self-start sm:self-auto">
+                <button
+                  id="studio-refined-save-btn"
+                  type="button"
+                  onClick={handleSaveRefined}
+                  disabled={isUpdating}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-stone-900 text-stone-50 text-xs font-semibold hover:bg-stone-800 active:scale-[0.98] transition cursor-pointer disabled:opacity-60"
+                >
+                  {isUpdating ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Check className="w-3.5 h-3.5 text-amber-400" />
+                  )}
+                  <span>Save changes</span>
+                </button>
+                <button
+                  id="studio-refined-discard-btn"
+                  type="button"
+                  onClick={handleDiscardRefined}
+                  disabled={isUpdating}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-stone-300 bg-white text-stone-700 text-xs font-medium hover:bg-stone-50 active:scale-[0.98] transition cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5 text-stone-500" />
+                  <span>Discard</span>
+                </button>
+              </div>
+            </div>
+          )}
 
-            {onSaveIdea && (
+          {/* Actions: save + edit + refine + portable build spec export + start new */}
+          <div className="rounded-2xl border border-stone-200 bg-white p-4 sm:p-5 shadow-xs flex flex-wrap items-center gap-2.5">
+            <span className="text-xs font-semibold text-stone-600 mr-1">Actions:</span>
+
+            {/* Edit Toggle for Saved Ideas */}
+            {initialIdea && (
+              <button
+                id="studio-edit-toggle-btn"
+                type="button"
+                onClick={() => {
+                  if (!isEditing && activeIdea) {
+                    setEditTitle(activeIdea.title || "");
+                    setEditOneLiner(activeIdea.oneLiner || "");
+                    setEditFirstStep(activeIdea.firstStep || "");
+                    setEditNotes(activeIdea.notes || "");
+                  }
+                  setIsEditing((prev) => !prev);
+                }}
+                className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border text-xs font-medium transition cursor-pointer ${
+                  isEditing
+                    ? "bg-amber-100/90 border-amber-300 text-amber-950 font-semibold"
+                    : "border-stone-300 bg-white text-stone-800 hover:bg-stone-50"
+                }`}
+              >
+                <Edit3 className="w-3.5 h-3.5 text-amber-700" />
+                <span>{isEditing ? "Editing…" : "Edit"}</span>
+              </button>
+            )}
+
+            {/* Refine / Expand Action */}
+            {initialIdea && (
+              <button
+                id="studio-refine-toggle-btn"
+                type="button"
+                onClick={() => setIsRefiningOpen((prev) => !prev)}
+                className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border text-xs font-medium transition cursor-pointer ${
+                  isRefiningOpen
+                    ? "bg-amber-100/90 border-amber-300 text-amber-950 font-semibold"
+                    : "border-amber-300/80 bg-amber-50/70 text-amber-900 hover:bg-amber-100"
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                <span>Refine / expand</span>
+              </button>
+            )}
+
+            {onSaveIdea && !initialIdea && (
               <button
                 id="studio-save-idea-btn"
                 type="button"
@@ -272,7 +488,7 @@ export const ProjectStudio: React.FC<ProjectStudioProps> = ({
                 className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-stone-900 text-stone-50 text-xs font-medium hover:bg-stone-800 active:scale-[0.98] transition disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
               >
                 <Save className="w-3.5 h-3.5 text-amber-400" />
-                <span>{saving ? "Saving…" : initialIdea ? "Re-save to history" : "Save to history"}</span>
+                <span>{saving ? "Saving…" : "Save to history"}</span>
               </button>
             )}
 
@@ -310,13 +526,200 @@ export const ProjectStudio: React.FC<ProjectStudioProps> = ({
               </button>
             )}
 
+            {/* Small Saved Confirmation Indicator */}
+            {saveStatus === "saved" && (
+              <span
+                id="studio-saved-confirmation"
+                className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200 animate-fadeIn"
+              >
+                <Check className="w-3.5 h-3.5" />
+                Saved
+              </span>
+            )}
+
             <span className="w-full sm:w-auto sm:ml-auto text-[11px] text-stone-400">
               Build it in Gemini, Claude, or a local model (Ollama).
             </span>
           </div>
 
-          {/* Idea Card */}
-          {hasIdeaCard && (
+          {/* Refine / Expand Panel */}
+          {isRefiningOpen && (
+            <div
+              id="studio-refine-panel"
+              className="rounded-2xl border border-amber-200 bg-amber-50/50 p-4 sm:p-5 space-y-3 animate-fadeIn"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-xs font-semibold text-amber-900 uppercase tracking-wider">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                  <span>Refine & Expand with Gemini</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsRefiningOpen(false)}
+                  className="text-stone-400 hover:text-stone-600 p-1"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <p className="text-xs text-stone-600">
+                Provide instructions to regenerate an improved version (e.g. &ldquo;add more capabilities&rdquo;, &ldquo;simplify the tech stack&rdquo;, &ldquo;deepen data flow and execution steps&rdquo;).
+              </p>
+              <textarea
+                id="studio-refine-instruction-input"
+                value={refineInstruction}
+                onChange={(e) => setRefineInstruction(e.target.value)}
+                placeholder="e.g. Add real-time streaming capabilities and simplify the tech stack..."
+                rows={2}
+                className="w-full text-xs sm:text-sm p-3 rounded-xl border border-stone-300 bg-white text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-300 focus:border-amber-400"
+              />
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsRefiningOpen(false)}
+                  className="px-3 py-1.5 rounded-lg text-xs text-stone-600 hover:bg-stone-100 transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  id="studio-refine-submit-btn"
+                  type="button"
+                  onClick={handleRefineIdea}
+                  disabled={refining}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-900 text-amber-50 text-xs font-medium hover:bg-amber-800 active:scale-[0.98] transition cursor-pointer disabled:opacity-60"
+                >
+                  {refining ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Refining idea…</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                      <span>Refine with Gemini</span>
+                    </>
+                  )}
+                </button>
+              </div>
+              {refineError && (
+                <p className="text-xs text-red-600 font-medium">{refineError}</p>
+              )}
+            </div>
+          )}
+
+          {/* Edit Saved Idea Mode */}
+          {isEditing && (
+            <div
+              id="studio-edit-card"
+              className="rounded-2xl border border-amber-300 bg-white p-5 sm:p-6 shadow-xs space-y-4 animate-fadeIn"
+            >
+              <div className="flex items-center justify-between pb-3 border-b border-stone-100">
+                <div className="flex items-center gap-2 text-xs font-semibold text-amber-900 uppercase tracking-wider">
+                  <Edit3 className="w-3.5 h-3.5 text-amber-600" />
+                  <span>Editing Saved Idea</span>
+                </div>
+                {saveStatus === "saved" && (
+                  <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
+                    <Check className="w-3.5 h-3.5" />
+                    Saved
+                  </span>
+                )}
+              </div>
+
+              <div className="space-y-3.5">
+                <div>
+                  <label htmlFor="studio-edit-title" className="block text-xs font-semibold text-stone-700 mb-1">
+                    Project Title
+                  </label>
+                  <input
+                    id="studio-edit-title"
+                    type="text"
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    className="w-full text-sm font-semibold p-2.5 rounded-xl border border-stone-300 bg-white text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-200 focus:border-amber-500"
+                    placeholder="Project title..."
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="studio-edit-oneliner" className="block text-xs font-semibold text-stone-700 mb-1">
+                    One-Liner Pitch
+                  </label>
+                  <input
+                    id="studio-edit-oneliner"
+                    type="text"
+                    value={editOneLiner}
+                    onChange={(e) => setEditOneLiner(e.target.value)}
+                    className="w-full text-xs sm:text-sm p-2.5 rounded-xl border border-stone-300 bg-white text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-200 focus:border-amber-500"
+                    placeholder="Single-sentence pitch..."
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="studio-edit-firststep" className="block text-xs font-semibold text-stone-700 mb-1">
+                    First Actionable Step
+                  </label>
+                  <textarea
+                    id="studio-edit-firststep"
+                    value={editFirstStep}
+                    onChange={(e) => setEditFirstStep(e.target.value)}
+                    rows={2}
+                    className="w-full text-xs sm:text-sm p-2.5 rounded-xl border border-stone-300 bg-white text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-200 focus:border-amber-500"
+                    placeholder="Concrete first step to begin..."
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="studio-edit-notes" className="block text-xs font-semibold text-stone-700 mb-1">
+                    My Notes (free-text)
+                  </label>
+                  <textarea
+                    id="studio-edit-notes"
+                    value={editNotes}
+                    onChange={(e) => setEditNotes(e.target.value)}
+                    rows={3}
+                    className="w-full text-xs sm:text-sm p-2.5 rounded-xl border border-stone-300 bg-white text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-200 focus:border-amber-500"
+                    placeholder="Personal notes, constraints, research links, implementation thoughts..."
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between pt-3 border-t border-stone-100">
+                <button
+                  id="studio-edit-cancel-btn"
+                  type="button"
+                  onClick={() => {
+                    setIsEditing(false);
+                    setEditTitle(activeIdea?.title || "");
+                    setEditOneLiner(activeIdea?.oneLiner || "");
+                    setEditFirstStep(activeIdea?.firstStep || "");
+                    setEditNotes(activeIdea?.notes || "");
+                  }}
+                  className="px-3.5 py-2 rounded-xl border border-stone-300 bg-white text-stone-700 text-xs font-medium hover:bg-stone-50 transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    id="studio-edit-save-btn"
+                    type="button"
+                    onClick={handleSaveEditedIdea}
+                    disabled={isUpdating}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-stone-900 text-stone-50 text-xs font-semibold hover:bg-stone-800 active:scale-[0.98] transition cursor-pointer disabled:opacity-60"
+                  >
+                    {isUpdating ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Check className="w-3.5 h-3.5 text-amber-400" />
+                    )}
+                    <span>Save changes</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Standard Idea Card (Read-only view) */}
+          {!isEditing && hasIdeaCard && (
             <div
               id="studio-idea-card"
               className="rounded-2xl border border-stone-200 bg-white p-5 sm:p-6 shadow-xs space-y-3"
@@ -343,6 +746,22 @@ export const ProjectStudio: React.FC<ProjectStudioProps> = ({
                   {activeIdea.idea}
                 </p>
               )}
+            </div>
+          )}
+
+          {/* My Notes Display Card (when notes exist and not currently editing) */}
+          {!isEditing && activeIdea?.notes && (
+            <div
+              id="studio-notes-card"
+              className="rounded-2xl border border-stone-200 bg-white p-5 sm:p-6 shadow-xs space-y-2"
+            >
+              <div className="flex items-center gap-2 text-xs font-semibold text-stone-600 tracking-wider uppercase">
+                <FileText className="w-3.5 h-3.5 text-amber-600" />
+                <span>My Notes</span>
+              </div>
+              <p className="text-xs sm:text-sm text-stone-700 whitespace-pre-wrap leading-relaxed">
+                {activeIdea.notes}
+              </p>
             </div>
           )}
 

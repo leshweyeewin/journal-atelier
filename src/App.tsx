@@ -15,6 +15,7 @@ import { PinModal } from "./components/PinModal";
 import { DashboardView } from "./components/DashboardView";
 import {
   saveInteraction,
+  updateInteraction,
   subscribeUserInteractions,
   deleteInteraction,
   getSecuritySettings,
@@ -247,7 +248,10 @@ export default function App() {
   const handleSelectEntry = useCallback(
     (entry: JournalInteraction) => {
       if (entry.projectIdea) {
-        setStudioIdea(entry.projectIdea);
+        setStudioIdea({
+          ...entry.projectIdea,
+          id: entry.id,
+        });
         setView("studio");
         return;
       }
@@ -322,35 +326,73 @@ export default function App() {
         setStudioToast("Sign in to save ideas.");
         return;
       }
-      const id = `idea_${Date.now()}`;
+      const id = idea.id || `idea_${Date.now()}`;
+      const savedIdea: ProjectIdea = { ...idea, id };
       const body = [
-        idea.oneLiner ? `_${idea.oneLiner}_` : "",
-        idea.idea || "",
-        idea.firstStep ? `**First step:** ${idea.firstStep}` : "",
+        savedIdea.oneLiner ? `_${savedIdea.oneLiner}_` : "",
+        savedIdea.idea || "",
+        savedIdea.firstStep ? `**First step:** ${savedIdea.firstStep}` : "",
+        savedIdea.notes ? `**Notes:** ${savedIdea.notes}` : "",
       ]
         .filter(Boolean)
         .join("\n\n");
       try {
         await saveInteraction(currentUser.uid, {
           id,
-          title: idea.title || "Project idea",
+          title: savedIdea.title || "Project idea",
           content: body,
           mode: "brainstorm",
-          modelUsed: idea.modelUsed || "gemini-3.6-flash",
-          projectIdea: idea,
+          modelUsed: savedIdea.modelUsed || "gemini-3.6-flash",
+          projectIdea: savedIdea,
         });
+        setStudioIdea(savedIdea);
         setStudioToast("Idea saved to your history.");
         // Fire-and-forget outbound Telegram notification (best-effort, non-blocking)
         notifyProjectSaved({
-          title: idea.title,
-          oneLiner: idea.oneLiner,
-          firstStep: idea.firstStep,
+          title: savedIdea.title,
+          oneLiner: savedIdea.oneLiner,
+          firstStep: savedIdea.firstStep,
         });
       } catch {
         setStudioToast("Could not save idea. Please try again.");
       }
     },
     [currentUser]
+  );
+
+  // Update an existing saved idea in Firestore without creating a new entry
+  const handleUpdateIdea = useCallback(
+    async (id: string, patch: Partial<ProjectIdea>) => {
+      if (!currentUser) throw new Error("Not signed in");
+      if (!id) throw new Error("Missing idea document ID");
+
+      const existingEntry = interactions.find((e) => e.id === id || e.projectIdea?.id === id);
+      const baseIdea = existingEntry?.projectIdea || studioIdea || {};
+      const mergedIdea: ProjectIdea = {
+        ...baseIdea,
+        ...patch,
+        id,
+      };
+
+      const updatedBody = [
+        mergedIdea.oneLiner ? `_${mergedIdea.oneLiner}_` : "",
+        mergedIdea.idea || "",
+        mergedIdea.firstStep ? `**First step:** ${mergedIdea.firstStep}` : "",
+        mergedIdea.notes ? `**Notes:** ${mergedIdea.notes}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n\n");
+
+      await updateInteraction(currentUser.uid, id, {
+        title: mergedIdea.title || existingEntry?.title || "Project idea",
+        content: updatedBody,
+        projectIdea: mergedIdea,
+      });
+
+      setStudioIdea(mergedIdea);
+      setStudioToast("Changes saved to your history.");
+    },
+    [currentUser, interactions, studioIdea]
   );
 
   // Guaranteed Transactional Save to Firestore
@@ -710,6 +752,7 @@ export default function App() {
           {view === "studio" ? (
             <ProjectStudio
               onSaveIdea={handleSaveIdea}
+              onUpdateIdea={handleUpdateIdea}
               initialIdea={studioIdea}
               onClearInitialIdea={() => setStudioIdea(null)}
             />

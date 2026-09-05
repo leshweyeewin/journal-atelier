@@ -51,18 +51,6 @@ export const Navbar: React.FC<NavbarProps> = ({
           {onNavigate && (
             <div className="flex items-center p-0.5 sm:p-1 rounded-xl bg-stone-100 border border-stone-200/80">
               <button
-                id="nav-journal-btn"
-                type="button"
-                onClick={() => onNavigate("journal")}
-                className={`px-2.5 sm:px-3 py-1 text-xs rounded-lg transition cursor-pointer ${
-                  view === "journal"
-                    ? "bg-white text-stone-900 shadow-2xs font-semibold"
-                    : "text-stone-600 hover:text-stone-900 font-medium"
-                }`}
-              >
-                Journal
-              </button>
-              <button
                 id="nav-dashboard-btn"
                 type="button"
                 onClick={() => onNavigate("dashboard")}
@@ -74,6 +62,18 @@ export const Navbar: React.FC<NavbarProps> = ({
               >
                 <TrendingUp className={`w-3.5 h-3.5 ${view === "dashboard" ? "text-amber-700" : "text-stone-500"}`} />
                 <span>Trends</span>
+              </button>
+              <button
+                id="nav-journal-btn"
+                type="button"
+                onClick={() => onNavigate("journal")}
+                className={`px-2.5 sm:px-3 py-1 text-xs rounded-lg transition cursor-pointer ${
+                  view === "journal"
+                    ? "bg-white text-stone-900 shadow-2xs font-semibold"
+                    : "text-stone-600 hover:text-stone-900 font-medium"
+                }`}
+              >
+                Journal
               </button>
               <button
                 id="nav-studio-btn"

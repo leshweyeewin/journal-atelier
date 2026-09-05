@@ -26,6 +26,7 @@ export interface SummaryResult {
 }
 
 export interface ProjectIdea {
+  id?: string;
   title?: string;
   idea?: string;
   oneLiner?: string;
@@ -37,6 +38,7 @@ export interface ProjectIdea {
   milestones?: string[];
   risks?: string[];
   firstStep?: string;
+  notes?: string;
   modelUsed?: string;
 }
 
