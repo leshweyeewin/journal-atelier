@@ -1,6 +1,6 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut as fbSignOut } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { initializeFirestore, getFirestore } from "firebase/firestore";
 import firebaseConfig from "../firebase-applet-config.json";
 import { initializeAppCheck, ReCaptchaV3Provider } from "firebase/app-check";
 
@@ -28,10 +28,29 @@ googleProvider.setCustomParameters({
   prompt: "select_account",
 });
 
-// Initialize Cloud Firestore with the configured Database ID
-export const db = firebaseConfig.firestoreDatabaseId
-  ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
-  : getFirestore(app);
+// Initialize Cloud Firestore with resilient long-polling transport for iframe and proxy reliability
+function createFirestoreInstance() {
+  try {
+    return firebaseConfig.firestoreDatabaseId
+      ? initializeFirestore(
+          app,
+          {
+            experimentalForceLongPolling: true,
+          },
+          firebaseConfig.firestoreDatabaseId
+        )
+      : initializeFirestore(app, {
+          experimentalForceLongPolling: true,
+        });
+  } catch {
+    // If Firestore was already initialized, retrieve existing instance
+    return firebaseConfig.firestoreDatabaseId
+      ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
+      : getFirestore(app);
+  }
+}
+
+export const db = createFirestoreInstance();
 
 export async function signInWithGoogle() {
   try {

@@ -10,9 +10,9 @@ interface HistorySidebarProps {
   isLoading?: boolean;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
-  isUnlocked: boolean;
+  isUnlocked?: boolean;
   onToggleLock: (entry: JournalInteraction) => void;
-  onRequestUnlock: () => void;
+  onRequestUnlock?: () => void;
 }
 
 export const HistorySidebar: React.FC<HistorySidebarProps> = ({
@@ -23,9 +23,7 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
   isLoading,
   isCollapsed = false,
   onToggleCollapse,
-  isUnlocked,
   onToggleLock,
-  onRequestUnlock,
 }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
@@ -35,7 +33,7 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
   const filteredEntries = safeEntries.filter((item) => {
     if (!item) return false;
     // SEARCH SAFETY: locked content must never surface via search while locked
-    if (item.locked && !isUnlocked && searchQuery.trim()) {
+    if (item.locked && searchQuery.trim()) {
       return false;
     }
     if (!searchQuery.trim()) return true;
@@ -154,11 +152,8 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
         ) : (
           filteredEntries.map((entry) => {
             const isActive = entry.id === activeEntryId;
-            const isMasked = entry.locked && !isUnlocked;
+            const isLocked = Boolean(entry.locked);
             const cardTitle = entry.title || "Untitled Reflection";
-            const cardPreview = isMasked
-              ? (entry.reflection ? entry.reflection : "🔒 Text hidden — tap to unlock")
-              : (entry.content || (entry.messages && entry.messages.length > 0 ? entry.messages[0].content : "No reflection body yet..."));
 
             return (
               <div
@@ -176,54 +171,58 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
                     {cardTitle}
                   </h3>
                   <div className="flex items-center gap-1.5 shrink-0">
-                    {entry.projectIdea && (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-amber-100/80 text-amber-900 border border-amber-300/70">
-                        <Sparkles className="w-2.5 h-2.5 text-amber-600 shrink-0" />
-                        <span>Project</span>
+                    {isLocked ? (
+                      <span className="inline-flex items-center gap-1 text-[10px] text-amber-800 font-medium px-1.5 py-0.5 rounded bg-amber-50 border border-amber-200/70">
+                        <Lock className="w-2.5 h-2.5 text-amber-700" />
+                        <span>Locked</span>
                       </span>
+                    ) : (
+                      <>
+                        {entry.projectIdea && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-amber-100/80 text-amber-900 border border-amber-300/70">
+                            <Sparkles className="w-2.5 h-2.5 text-amber-600 shrink-0" />
+                            <span>Project</span>
+                          </span>
+                        )}
+                        <span className="text-[10px] text-stone-400 flex items-center gap-1">
+                          <Calendar className="w-2.5 h-2.5" />
+                          {formatDate(entry.updatedAt)}
+                        </span>
+                      </>
                     )}
-                    <span className="text-[10px] text-stone-400 flex items-center gap-1">
-                      <Calendar className="w-2.5 h-2.5" />
-                      {formatDate(entry.updatedAt)}
-                    </span>
                   </div>
                 </div>
 
-                <p className={`text-[11px] line-clamp-2 mb-2 leading-relaxed ${isMasked && !entry.reflection ? "text-stone-400 italic" : "text-stone-500"}`}>
-                  {cardPreview}
-                </p>
+                {!isLocked && (
+                  <>
+                    <p className="text-[11px] line-clamp-2 mb-2 leading-relaxed text-stone-500">
+                      {entry.content || (entry.messages && entry.messages.length > 0 ? entry.messages[0].content : "No reflection body yet...")}
+                    </p>
 
-                <div className="flex items-center justify-between pt-1 border-t border-stone-100">
-                  <div className="flex items-center gap-1.5 flex-wrap overflow-hidden">
-                    {(entry.sentiment?.tag || entry.mood) && (
-                      <span className="inline-flex items-center text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200/60 font-medium">
-                        {entry.sentiment?.tag || entry.mood}
-                      </span>
-                    )}
-                    {entry.tags && entry.tags.length > 0 && (
-                      <span className="inline-flex items-center gap-0.5 text-[10px] text-stone-600 max-w-[110px] truncate bg-stone-100/90 px-1.5 py-0.5 rounded border border-stone-200/60 font-medium">
-                        <Tag className="w-2.5 h-2.5 text-stone-400 shrink-0" />
-                        <span className="truncate">#{entry.tags[0]}</span>
-                        {entry.tags.length > 1 && (
-                          <span className="text-[9px] text-stone-400">+{entry.tags.length - 1}</span>
+                    <div className="flex items-center justify-between pt-1 border-t border-stone-100">
+                      <div className="flex items-center gap-1.5 flex-wrap overflow-hidden">
+                        {(entry.sentiment?.tag || entry.mood) && (
+                          <span className="inline-flex items-center text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200/60 font-medium">
+                            {entry.sentiment?.tag || entry.mood}
+                          </span>
                         )}
-                      </span>
-                    )}
-                    {!isMasked && entry.messages && entry.messages.length > 0 && (
-                      <span className="inline-flex items-center gap-0.5 text-[10px] text-stone-500">
-                        <Sparkles className="w-2.5 h-2.5 text-stone-400" />
-                        {entry.messages.length}
-                      </span>
-                    )}
-                    {entry.locked && (
-                      <span className="inline-flex items-center gap-1 text-[10px] text-amber-700 font-medium">
-                        <Lock className="w-2.5 h-2.5" />
-                        <span>{isUnlocked ? "Protected" : "Locked"}</span>
-                      </span>
-                    )}
-                  </div>
+                        {entry.tags && entry.tags.length > 0 && (
+                          <span className="inline-flex items-center gap-0.5 text-[10px] text-stone-600 max-w-[110px] truncate bg-stone-100/90 px-1.5 py-0.5 rounded border border-stone-200/60 font-medium">
+                            <Tag className="w-2.5 h-2.5 text-stone-400 shrink-0" />
+                            <span className="truncate">#{entry.tags[0]}</span>
+                            {entry.tags.length > 1 && (
+                              <span className="text-[9px] text-stone-400">+{entry.tags.length - 1}</span>
+                            )}
+                          </span>
+                        )}
+                        {entry.messages && entry.messages.length > 0 && (
+                          <span className="inline-flex items-center gap-0.5 text-[10px] text-stone-500">
+                            <Sparkles className="w-2.5 h-2.5 text-stone-400" />
+                            {entry.messages.length}
+                          </span>
+                        )}
+                      </div>
 
-                    {!isMasked && (
                       <div className="flex items-center gap-0.5">
                         <button
                           id={`lock-entry-btn-${entry.id}`}
@@ -232,15 +231,11 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
                             e.stopPropagation();
                             onToggleLock(entry);
                           }}
-                          title={entry.locked ? "Unlock entry" : "Lock entry"}
+                          title="Protect entry"
                           className="opacity-60 group-hover:opacity-100 p-1 text-stone-400 hover:text-amber-700 rounded transition cursor-pointer"
-                          aria-label={entry.locked ? "Unlock entry" : "Lock entry"}
+                          aria-label="Protect entry"
                         >
-                          {entry.locked ? (
-                            <Lock className="w-3.5 h-3.5 text-amber-700" />
-                          ) : (
-                            <LockOpen className="w-3.5 h-3.5" />
-                          )}
+                          <LockOpen className="w-3.5 h-3.5" />
                         </button>
 
                         {confirmingId === entry.id ? (
@@ -284,8 +279,9 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
                           </button>
                         )}
                       </div>
-                    )}
-                </div>
+                    </div>
+                  </>
+                )}
               </div>
             );
           })

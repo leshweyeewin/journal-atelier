@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { onAuthStateChanged } from "firebase/auth";
+import { Lock, LockOpen } from "lucide-react";
 import { auth } from "./firebase";
 import { AppUser, ChatMessage, JournalInteraction, ReflectionMode, SummaryResult, SecuritySettings, ProjectIdea } from "./types";
 import { Navbar } from "./components/Navbar";
@@ -83,12 +84,13 @@ export default function App() {
 
   // PIN & Security lock states
   const [security, setSecurity] = useState<SecuritySettings | null>(null);
-  const [isUnlocked, setIsUnlocked] = useState(false);
+  const [unlockedEntryId, setUnlockedEntryId] = useState<string | null>(null);
   const [pinModal, setPinModal] = useState<"set" | "enter" | null>(null);
   const [pendingLockedEntry, setPendingLockedEntry] = useState<JournalInteraction | null>(null);
   const hasPin = !!security;
   const activeEntry = interactions.find((e) => e.id === activeId);
-  const isCurrentEntryMasked = Boolean(activeEntry?.locked && !isUnlocked);
+  const activeLocked = !!activeEntry?.locked;
+  const isRevealed = !activeLocked || activeId === unlockedEntryId;
 
   // Listen to Firebase Authentication state
   useEffect(() => {
@@ -105,7 +107,7 @@ export default function App() {
         setCurrentUser(null);
         setInteractions([]);
         setSecurity(null);
-        setIsUnlocked(false);
+        setUnlockedEntryId(null);
         hasAutoLandedRef.current = false;
       }
       setAuthLoading(false);
@@ -179,6 +181,7 @@ export default function App() {
 
   // Handler to start a brand new reflection
   const handleNewEntry = useCallback(() => {
+    setUnlockedEntryId(null);
     const newId = `entry_${Date.now()}`;
     setActiveId(newId);
     setTitle("");
@@ -196,19 +199,18 @@ export default function App() {
     lastSavedSnapshotRef.current = `${newId}:::[]`;
   }, []);
 
-  // Extracted entry loader (shows summary level, masks raw text if locked & not unlocked)
+  // Extracted entry loader
   const openEntry = useCallback(
-    (entry: JournalInteraction, forceUnlocked = false) => {
+    (entry: JournalInteraction) => {
       setView("journal");
       setActiveId(entry.id);
       setTitle(entry.title || "");
-      const masked = Boolean(entry.locked && !(forceUnlocked || isUnlocked));
-      const loadedContent = masked ? "" : (entry.content || (entry as any).idea || (entry as any).oneLiner || "");
+      const loadedContent = entry.content || (entry as any).idea || (entry as any).oneLiner || "";
       setContent(loadedContent);
       const loadedTags = Array.isArray(entry.tags) ? entry.tags : [];
       setTags(loadedTags);
       setMode(entry.mode === "summarize" ? "reflect" : entry.mode || "reflect");
-      setMessages(masked ? [] : (Array.isArray(entry.messages) ? entry.messages : []));
+      setMessages(Array.isArray(entry.messages) ? entry.messages : []);
       setAgentLoadingState(null);
       if (
         entry.summary ||
@@ -240,13 +242,24 @@ export default function App() {
       setFailedSavePayload(null);
       lastSavedSnapshotRef.current = `${entry.id}:${entry.title || ""}:${loadedContent}:${JSON.stringify(loadedTags)}`;
     },
-    [isUnlocked]
+    []
   );
 
   // Handler to select an existing reflection or saved project idea from history:
-  // If entry.projectIdea is present, route to studio directly without lock check
+  // Gate FIRST with PIN if locked and not revealed, then route to studio or openEntry
   const handleSelectEntry = useCallback(
     (entry: JournalInteraction) => {
+      if (entry.locked && entry.id !== unlockedEntryId) {
+        setPendingLockedEntry(entry);
+        setPinModal("enter");
+        return; // never populate unrevealed locked content
+      }
+
+      // Re-lock whenever a different entry is opened
+      if (unlockedEntryId && unlockedEntryId !== entry.id) {
+        setUnlockedEntryId(null);
+      }
+
       if (entry.projectIdea) {
         setStudioIdea({
           ...entry.projectIdea,
@@ -257,9 +270,8 @@ export default function App() {
       }
       setStudioIdea(null);
       openEntry(entry);
-      setView("journal");
     },
-    [openEntry]
+    [openEntry, unlockedEntryId]
   );
 
   // PIN security handlers
@@ -270,11 +282,20 @@ export default function App() {
     const s = { salt, hash, iterations: PIN_ITERATIONS, updatedAt: Date.now() };
     await setSecuritySettings(currentUser.uid, s);
     setSecurity(s);
-    setIsUnlocked(true);
     setPinModal(null);
-    const target = pendingLockedEntry || interactions.find((e) => e.id === activeId);
+    const target = pendingLockedEntry || (activeLocked ? activeEntry : null);
     if (target) {
-      openEntry(target, true);
+      setUnlockedEntryId(target.id);
+      if (target.projectIdea) {
+        setStudioIdea({
+          ...target.projectIdea,
+          id: target.id,
+        });
+        setView("studio");
+      } else {
+        setStudioIdea(null);
+        openEntry(target);
+      }
       setPendingLockedEntry(null);
     }
     return null;
@@ -284,11 +305,20 @@ export default function App() {
     if (!security) return "No PIN set";
     const hash = await hashPin(pin, security.salt, security.iterations);
     if (!safeEqual(hash, security.hash)) return "Incorrect PIN";
-    setIsUnlocked(true);
     setPinModal(null);
-    const target = pendingLockedEntry || interactions.find((e) => e.id === activeId);
+    const target = pendingLockedEntry || (activeLocked ? activeEntry : null);
     if (target) {
-      openEntry(target, true);
+      setUnlockedEntryId(target.id);
+      if (target.projectIdea) {
+        setStudioIdea({
+          ...target.projectIdea,
+          id: target.id,
+        });
+        setView("studio");
+      } else {
+        setStudioIdea(null);
+        openEntry(target);
+      }
       setPendingLockedEntry(null);
     }
     return null;
@@ -398,22 +428,21 @@ export default function App() {
   // Guaranteed Transactional Save to Firestore
   const persistToFirestore = async (override?: Partial<JournalInteraction>) => {
     if (!currentUser) return null;
+
+    // 6) Autosave guard: skip when activeLocked && activeId !== unlockedEntryId
+    if (activeLocked && activeId !== unlockedEntryId) {
+      return null;
+    }
+
     setIsSaving(true);
     setErrorMessage(null);
-
-    const currentActive = interactions.find((e) => e.id === activeId);
-    const isMasked = Boolean(currentActive?.locked && !isUnlocked);
-
-    // SECURITY: If the entry is currently masked (locked & not unlocked), never overwrite the stored raw text/messages with empty strings!
-    const effectiveContent = isMasked ? (currentActive?.content || "") : content;
-    const effectiveMessages = isMasked ? (currentActive?.messages || []) : messages;
 
     const payloadToSave: Partial<JournalInteraction> & { id: string } = {
       id: activeId,
       title: title.trim() || summaryData?.suggestedTitle || "Untitled Reflection",
-      content: effectiveContent,
+      content,
       mode,
-      messages: effectiveMessages,
+      messages,
       summary: summaryData?.summary || "",
       insights: summaryData?.insights || [],
       tags: override?.tags !== undefined ? override.tags : tags,
@@ -446,7 +475,7 @@ export default function App() {
   // Security & Resilience:
   // - Debounce ~1800ms after user stops changing title, content, or tags
   // - Only autosaves when content.trim() is non-empty and user is signed in
-  // - SECURITY: never autosaves when active entry is locked and isUnlocked is false
+  // - SECURITY: never autosaves when active entry is locked and not currently revealed
   // - Skips autosave while manual save (isSaving) is in flight to prevent write races
   // - Reuses existing persistToFirestore(); never invokes Gemini
   // - Does not autosave in Studio or Trends views
@@ -462,9 +491,8 @@ export default function App() {
     if (!content.trim()) return;
     if (isSaving) return;
 
-    // SECURITY: never autosave when the active entry is locked and isUnlocked is false
-    const currentActive = interactions.find((e) => e.id === activeId);
-    if (currentActive?.locked && !isUnlocked) return;
+    // SECURITY: never autosave when activeLocked && activeId !== unlockedEntryId
+    if (activeLocked && activeId !== unlockedEntryId) return;
 
     const currentSnapshot = `${activeId}:${title}:${content}:${JSON.stringify(tags)}`;
     if (lastSavedSnapshotRef.current === currentSnapshot) {
@@ -476,18 +504,18 @@ export default function App() {
       if (view !== "journal") return;
       if (!currentUser || !content.trim()) return;
       if (isSaving) return;
-      const active = interactions.find((e) => e.id === activeId);
-      if (active?.locked && !isUnlocked) return;
+      if (activeLocked && activeId !== unlockedEntryId) return;
 
       persistToFirestore();
       lastSavedSnapshotRef.current = currentSnapshot;
     }, 1800);
 
     return () => clearTimeout(timer);
-  }, [title, content, tags]);
+  }, [title, content, tags, activeLocked, activeId, unlockedEntryId, view, currentUser, isSaving]);
 
   // Tag management handlers with immediate Firestore persistence for active entries
   const handleAddTag = async (tagText: string) => {
+    if (activeLocked && activeId !== unlockedEntryId) return;
     const cleanTag = tagText.trim().replace(/^#+/, "").replace(/[<>{}[\]\\\/]/g, "").trim();
     if (!cleanTag) return;
     if (tags.some((t) => t.toLowerCase() === cleanTag.toLowerCase())) return;
@@ -502,6 +530,7 @@ export default function App() {
   };
 
   const handleRemoveTag = async (tagToRemove: string) => {
+    if (activeLocked && activeId !== unlockedEntryId) return;
     const nextTags = tags.filter((t) => t !== tagToRemove);
     setTags(nextTags);
 
@@ -571,7 +600,8 @@ export default function App() {
 
   // Explicit Save button click: saves entry and then triggers multi-agent reflection
   const handleManualSave = async () => {
-    if (isCurrentEntryMasked) {
+    if (!isRevealed) {
+      if (activeEntry) setPendingLockedEntry(activeEntry);
       setPinModal("enter");
       return;
     }
@@ -587,7 +617,8 @@ export default function App() {
 
   // Reflect with Gemini based on user's current written reflection
   const handleReflectWithAI = async () => {
-    if (isCurrentEntryMasked) {
+    if (!isRevealed) {
+      if (activeEntry) setPendingLockedEntry(activeEntry);
       setPinModal("enter");
       return;
     }
@@ -633,7 +664,8 @@ export default function App() {
 
   // Send a message inside the multi-turn chat stream
   const handleSendChatMessage = async (text: string) => {
-    if (isCurrentEntryMasked) {
+    if (!isRevealed) {
+      if (activeEntry) setPendingLockedEntry(activeEntry);
       setPinModal("enter");
       return;
     }
@@ -680,7 +712,8 @@ export default function App() {
 
   // Unified Synthesize action: triggers the 4-agent reflection pipeline
   const handleSummarizeWithAI = async () => {
-    if (isCurrentEntryMasked) {
+    if (!isRevealed) {
+      if (activeEntry) setPendingLockedEntry(activeEntry);
       setPinModal("enter");
       return;
     }
@@ -727,6 +760,7 @@ export default function App() {
           if (newView !== "studio") {
             setStudioIdea(null);
           }
+          setUnlockedEntryId(null);
           setView(newView);
         }}
       />
@@ -742,9 +776,7 @@ export default function App() {
           isLoading={listLoading}
           isCollapsed={isSidebarCollapsed}
           onToggleCollapse={() => setIsSidebarCollapsed((prev) => !prev)}
-          isUnlocked={isUnlocked}
           onToggleLock={handleToggleLock}
-          onRequestUnlock={() => setPinModal("enter")}
         />
 
         {/* Main Stage: Active Journal Atelier, Project Studio, or Dashboard Trends */}
@@ -761,10 +793,64 @@ export default function App() {
               entries={interactions}
               onSelectEntry={handleSelectEntry}
               onNewEntry={handleNewEntry}
-              isUnlocked={isUnlocked}
             />
           ) : (
             <>
+              {/* Top Lock Bar (view === "journal", only when activeLocked) */}
+              {activeLocked && (
+                <div
+                  id="active-entry-lock-bar"
+                  className="mb-4 px-4 py-2.5 rounded-xl border flex items-center justify-between gap-3 bg-white border-amber-200/80 shadow-xs"
+                >
+                  <div className="flex items-center gap-2 text-xs font-medium text-stone-700">
+                    {isRevealed ? (
+                      <>
+                        <span className="inline-flex items-center justify-center w-6 h-6 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200/70">
+                          <LockOpen className="w-3.5 h-3.5" />
+                        </span>
+                        <span className="font-semibold text-stone-900">Unlocked</span>
+                        <span className="text-stone-400 hidden sm:inline">• Protected entry revealed for this session</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="inline-flex items-center justify-center w-6 h-6 rounded-lg bg-amber-50 text-amber-700 border border-amber-200/70">
+                          <Lock className="w-3.5 h-3.5" />
+                        </span>
+                        <span className="font-semibold text-stone-900">This entry is locked</span>
+                        <span className="text-stone-400 hidden sm:inline">• PIN required to view reflections and chat</span>
+                      </>
+                    )}
+                  </div>
+
+                  {isRevealed ? (
+                    <button
+                      id="lock-revealed-entry-btn"
+                      type="button"
+                      onClick={() => setUnlockedEntryId(null)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg text-stone-700 bg-stone-100 hover:bg-stone-200 active:scale-95 transition cursor-pointer border border-stone-200"
+                    >
+                      <Lock className="w-3.5 h-3.5 text-amber-700" />
+                      <span>Lock</span>
+                    </button>
+                  ) : (
+                    <button
+                      id="unlock-entry-btn"
+                      type="button"
+                      onClick={() => {
+                        if (activeEntry) {
+                          setPendingLockedEntry(activeEntry);
+                        }
+                        setPinModal("enter");
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg text-white bg-stone-900 hover:bg-stone-800 active:scale-95 transition cursor-pointer shadow-xs"
+                    >
+                      <LockOpen className="w-3.5 h-3.5" />
+                      <span>Unlock to view</span>
+                    </button>
+                  )}
+                </div>
+              )}
+
               {/* Error Banner with guaranteed retry */}
               {errorMessage && (
                 <div className="mb-4">
@@ -783,53 +869,83 @@ export default function App() {
                 </div>
               )}
 
-              {/* AI Summary & Multi-Agent Reflection Card if present or analyzing */}
-              {(summaryData || agentLoadingState) && (
-                <SummaryCard
-                  summary={summaryData}
-                  agentLoadingState={agentLoadingState}
-                  onApplyTitle={(suggested) => setTitle(suggested)}
-                  onClose={() => {
-                    setSummaryData(null);
-                    setAgentLoadingState(null);
-                  }}
-                />
+              {/* Section Gating: when activeLocked && !isRevealed, render ONLY the lock bar + placeholder */}
+              {activeLocked && !isRevealed ? (
+                <div
+                  id="locked-entry-placeholder"
+                  className="flex-1 flex flex-col items-center justify-center py-16 px-4 text-center rounded-2xl border border-stone-200/80 bg-white/70"
+                >
+                  <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-700 mb-3 shadow-xs">
+                    <Lock className="w-6 h-6" />
+                  </div>
+                  <h3 className="text-sm font-semibold text-stone-900 mb-1">
+                    {activeEntry?.title || "Protected Reflection"}
+                  </h3>
+                  <p className="text-xs text-stone-500 max-w-sm mb-4">
+                    Enter your PIN to view this reflection
+                  </p>
+                  <button
+                    id="placeholder-unlock-btn"
+                    type="button"
+                    onClick={() => {
+                      if (activeEntry) {
+                        setPendingLockedEntry(activeEntry);
+                      }
+                      setPinModal("enter");
+                    }}
+                    className="inline-flex items-center gap-2 px-4 py-2 text-xs font-medium rounded-xl text-white bg-stone-900 hover:bg-stone-800 active:scale-95 transition cursor-pointer shadow-xs"
+                  >
+                    <LockOpen className="w-3.5 h-3.5" />
+                    <span>Enter PIN to Unlock</span>
+                  </button>
+                </div>
+              ) : (
+                <>
+                  {/* AI Summary & Multi-Agent Reflection Card if present or analyzing */}
+                  {(summaryData || agentLoadingState) && (
+                    <SummaryCard
+                      summary={summaryData}
+                      agentLoadingState={agentLoadingState}
+                      onApplyTitle={(suggested) => setTitle(suggested)}
+                      onClose={() => {
+                        setSummaryData(null);
+                        setAgentLoadingState(null);
+                      }}
+                    />
+                  )}
+
+                  {/* Core Journal / Reflection Composer */}
+                  <JournalEditor
+                    title={title}
+                    setTitle={setTitle}
+                    content={content}
+                    setContent={setContent}
+                    mode={mode}
+                    setMode={setMode}
+                    tags={tags}
+                    setTags={setTags}
+                    onAddTag={handleAddTag}
+                    onRemoveTag={handleRemoveTag}
+                    onReflectWithAI={handleReflectWithAI}
+                    onSummarizeWithAI={handleSummarizeWithAI}
+                    onSave={handleManualSave}
+                    isSaving={isSaving}
+                    isAiReflecting={isAiReflecting}
+                    isAiSummarizing={isAiSummarizing}
+                    lastSavedAt={lastSavedAt}
+                  />
+
+                  {/* Multi-turn Dialogue Stream with Gemini */}
+                  <div className="flex-1 min-h-[360px]">
+                    <ChatStream
+                      messages={messages}
+                      onSendMessage={handleSendChatMessage}
+                      isLoading={isAiReflecting}
+                      disabled={!content.trim() && messages.length === 0}
+                    />
+                  </div>
+                </>
               )}
-
-              {/* Core Journal / Reflection Composer */}
-              <JournalEditor
-                title={title}
-                setTitle={setTitle}
-                content={content}
-                setContent={setContent}
-                mode={mode}
-                setMode={setMode}
-                tags={tags}
-                setTags={setTags}
-                onAddTag={handleAddTag}
-                onRemoveTag={handleRemoveTag}
-                onReflectWithAI={handleReflectWithAI}
-                onSummarizeWithAI={handleSummarizeWithAI}
-                onSave={handleManualSave}
-                isSaving={isSaving}
-                isAiReflecting={isAiReflecting}
-                isAiSummarizing={isAiSummarizing}
-                lastSavedAt={lastSavedAt}
-                isLockedMasked={isCurrentEntryMasked}
-                onRequestUnlock={() => setPinModal("enter")}
-              />
-
-              {/* Multi-turn Dialogue Stream with Gemini */}
-              <div className="flex-1 min-h-[360px]">
-                <ChatStream
-                  messages={messages}
-                  onSendMessage={handleSendChatMessage}
-                  isLoading={isAiReflecting}
-                  disabled={!content.trim() && messages.length === 0}
-                  isLockedMasked={isCurrentEntryMasked}
-                  onRequestUnlock={() => setPinModal("enter")}
-                />
-              </div>
             </>
           )}
         </main>

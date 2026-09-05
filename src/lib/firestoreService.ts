@@ -9,8 +9,61 @@ import {
   getDocs,
   getDoc,
 } from "firebase/firestore";
-import { db } from "../firebase";
+import { db, auth } from "../firebase";
 import { JournalInteraction, SecuritySettings } from "../types";
+
+export enum OperationType {
+  CREATE = "create",
+  UPDATE = "update",
+  DELETE = "delete",
+  LIST = "list",
+  GET = "get",
+  WRITE = "write",
+}
+
+export interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string | null;
+    email?: string | null;
+    emailVerified?: boolean | null;
+    isAnonymous?: boolean | null;
+    tenantId?: string | null;
+    providerInfo?: {
+      providerId?: string | null;
+      email?: string | null;
+    }[];
+  };
+}
+
+export function handleFirestoreError(
+  error: unknown,
+  operationType: OperationType,
+  path: string | null
+): never {
+  const currentUser = auth.currentUser;
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: currentUser?.uid,
+      email: currentUser?.email,
+      emailVerified: currentUser?.emailVerified,
+      isAnonymous: currentUser?.isAnonymous,
+      tenantId: currentUser?.tenantId,
+      providerInfo:
+        currentUser?.providerData?.map((provider) => ({
+          providerId: provider.providerId,
+          email: provider.email,
+        })) || [],
+    },
+    operationType,
+    path,
+  };
+  console.error("Firestore Error: ", JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
 
 /**
  * Strict Undefined-Stripping utility to prevent Firestore SDK crash.
@@ -74,10 +127,15 @@ export async function saveInteraction(
   };
 
   const cleanPayload = sanitizeForFirestore(interactionData);
+  const path = `users/${userId}/interactions/${entry.id}`;
   const docRef = doc(db, "users", userId, "interactions", entry.id);
 
-  await setDoc(docRef, cleanPayload, { merge: true });
-  return interactionData;
+  try {
+    await setDoc(docRef, cleanPayload, { merge: true });
+    return interactionData;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
 }
 
 /**
@@ -94,8 +152,13 @@ export async function updateInteraction(
     ...patch,
     updatedAt: Date.now(),
   });
+  const path = `users/${userId}/interactions/${id}`;
   const docRef = doc(db, "users", userId, "interactions", id);
-  await setDoc(docRef, cleanPayload, { merge: true });
+  try {
+    await setDoc(docRef, cleanPayload, { merge: true });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, path);
+  }
 }
 
 /**
@@ -113,6 +176,7 @@ export function subscribeUserInteractions(
 
   const interactionsRef = collection(db, "users", userId, "interactions");
   const q = query(interactionsRef, orderBy("updatedAt", "desc"));
+  const path = `users/${userId}/interactions`;
 
   const unsubscribe = onSnapshot(
     q,
@@ -134,6 +198,11 @@ export function subscribeUserInteractions(
     (error) => {
       console.error("Error listening to user interactions:", error);
       if (onError) onError(error);
+      try {
+        handleFirestoreError(error, OperationType.LIST, path);
+      } catch {
+        // Logged via handleFirestoreError
+      }
     }
   );
 
@@ -147,20 +216,25 @@ export async function fetchUserInteractions(userId: string): Promise<JournalInte
   if (!userId) return [];
   const interactionsRef = collection(db, "users", userId, "interactions");
   const q = query(interactionsRef, orderBy("updatedAt", "desc"));
-  const snapshot = await getDocs(q);
-  const entries: JournalInteraction[] = [];
-  snapshot.forEach((docSnap) => {
-    const data = docSnap.data() as JournalInteraction;
-    entries.push({
-      ...data,
-      id: docSnap.id,
-      messages: Array.isArray(data.messages) ? data.messages : [],
-      tags: Array.isArray(data.tags) ? data.tags : [],
-      themes: Array.isArray(data.themes) ? data.themes : [],
-      insights: Array.isArray(data.insights) ? data.insights : [],
+  const path = `users/${userId}/interactions`;
+  try {
+    const snapshot = await getDocs(q);
+    const entries: JournalInteraction[] = [];
+    snapshot.forEach((docSnap) => {
+      const data = docSnap.data() as JournalInteraction;
+      entries.push({
+        ...data,
+        id: docSnap.id,
+        messages: Array.isArray(data.messages) ? data.messages : [],
+        tags: Array.isArray(data.tags) ? data.tags : [],
+        themes: Array.isArray(data.themes) ? data.themes : [],
+        insights: Array.isArray(data.insights) ? data.insights : [],
+      });
     });
-  });
-  return entries;
+    return entries;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, path);
+  }
 }
 
 /**
@@ -168,26 +242,46 @@ export async function fetchUserInteractions(userId: string): Promise<JournalInte
  */
 export async function deleteInteraction(userId: string, interactionId: string): Promise<void> {
   if (!userId || !interactionId) return;
+  const path = `users/${userId}/interactions/${interactionId}`;
   const docRef = doc(db, "users", userId, "interactions", interactionId);
-  await deleteDoc(docRef);
+  try {
+    await deleteDoc(docRef);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
+  }
 }
 
 export async function getSecuritySettings(userId: string): Promise<SecuritySettings | null> {
   if (!userId) return null;
+  const path = `users/${userId}/settings/security`;
   const ref = doc(db, "users", userId, "settings", "security");
-  const snap = await getDoc(ref);
-  return snap.exists() ? (snap.data() as SecuritySettings) : null;
+  try {
+    const snap = await getDoc(ref);
+    return snap.exists() ? (snap.data() as SecuritySettings) : null;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.GET, path);
+  }
 }
 
 export async function setSecuritySettings(userId: string, s: SecuritySettings): Promise<void> {
   if (!userId) throw new Error("User ID required");
+  const path = `users/${userId}/settings/security`;
   const ref = doc(db, "users", userId, "settings", "security");
-  await setDoc(ref, sanitizeForFirestore(s), { merge: true });
+  try {
+    await setDoc(ref, sanitizeForFirestore(s), { merge: true });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
 }
 
 export async function setInteractionLocked(userId: string, id: string, locked: boolean): Promise<void> {
   if (!userId || !id) return;
+  const path = `users/${userId}/interactions/${id}`;
   const ref = doc(db, "users", userId, "interactions", id);
-  await setDoc(ref, { locked }, { merge: true });
+  try {
+    await setDoc(ref, { locked }, { merge: true });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, path);
+  }
 }
 
