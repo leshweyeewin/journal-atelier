@@ -465,7 +465,7 @@ export default function App() {
       const saved = await saveInteraction(currentUser.uid, payloadToSave);
       setLastSavedAt(Date.now());
       if (newEntryPendingNotifyRef.current && !activeLocked) {
-        notifyEntrySaved({ title: payloadToSave.title });
+        notifyEntrySaved({ title: title.trim() || summaryData?.suggestedTitle || "" });
       }
       newEntryPendingNotifyRef.current = false;
       setFailedSavePayload(null);

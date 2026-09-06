@@ -1556,11 +1556,13 @@ app.post("/api/notify/weekly-digest", verifyUserToken, async (req: Request, res:
     const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
     const pastEntries: any[] = [];
 
-    // 1. Query Firestore using Admin SDK (without orderBy to avoid excluding documents lacking createdAt)
+    // 1. Query Firestore using Admin SDK (bounded to last 7 days, newest first)
     try {
       const db = getAdminDb();
       const snapshot = await db
         .collection(`users/${uid}/interactions`)
+        .where("createdAt", ">=", sevenDaysAgo)
+        .orderBy("createdAt", "desc")
         .limit(50)
         .get();
 
@@ -1575,7 +1577,7 @@ app.post("/api/notify/weekly-digest", verifyUserToken, async (req: Request, res:
     // 2. Query Firestore via REST API with user token if Admin SDK returned empty
     if (pastEntries.length === 0 && userToken && targetProjectId && firestoreDbId) {
       try {
-        const restUrl = `https://firestore.googleapis.com/v1/projects/${targetProjectId}/databases/${firestoreDbId}/documents/users/${uid}/interactions?pageSize=50`;
+        const restUrl = `https://firestore.googleapis.com/v1/projects/${targetProjectId}/databases/${firestoreDbId}/documents/users/${uid}/interactions?orderBy=createdAt%20desc&pageSize=50`;
         const restResp = await fetch(restUrl, {
           headers: { Authorization: `Bearer ${userToken}` },
         });
