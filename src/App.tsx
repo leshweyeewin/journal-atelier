@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { onAuthStateChanged } from "firebase/auth";
-import { Lock, LockOpen } from "lucide-react";
+import { Lock, LockOpen, Trash2 } from "lucide-react";
 import { auth } from "./firebase";
 import { AppUser, ChatMessage, JournalInteraction, ReflectionMode, SummaryResult, SecuritySettings, ProjectIdea } from "./types";
 import { Navbar } from "./components/Navbar";
@@ -911,22 +911,46 @@ export default function App() {
                     {activeEntry?.title || "Protected Reflection"}
                   </h3>
                   <p className="text-xs text-stone-500 max-w-sm mb-4">
-                    Enter your PIN to view this reflection
+                    Enter your PIN to view this reflection, or remove the lock / delete the entry directly.
                   </p>
-                  <button
-                    id="placeholder-unlock-btn"
-                    type="button"
-                    onClick={() => {
-                      if (activeEntry) {
-                        setPendingLockedEntry(activeEntry);
-                      }
-                      setPinModal("enter");
-                    }}
-                    className="inline-flex items-center gap-2 px-4 py-2 text-xs font-medium rounded-xl text-white bg-stone-900 hover:bg-stone-800 active:scale-95 transition cursor-pointer shadow-xs"
-                  >
-                    <LockOpen className="w-3.5 h-3.5" />
-                    <span>Enter PIN to Unlock</span>
-                  </button>
+                  <div className="flex flex-wrap items-center justify-center gap-2.5">
+                    <button
+                      id="placeholder-unlock-btn"
+                      type="button"
+                      onClick={() => {
+                        if (activeEntry) {
+                          setPendingLockedEntry(activeEntry);
+                        }
+                        setPinModal("enter");
+                      }}
+                      className="inline-flex items-center gap-2 px-4 py-2 text-xs font-medium rounded-xl text-white bg-stone-900 hover:bg-stone-800 active:scale-95 transition cursor-pointer shadow-xs"
+                    >
+                      <LockOpen className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Enter PIN to Unlock</span>
+                    </button>
+                    {activeEntry && (
+                      <>
+                        <button
+                          id="placeholder-remove-lock-btn"
+                          type="button"
+                          onClick={() => handleToggleLock(activeEntry)}
+                          className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium rounded-xl border border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100 active:scale-95 transition cursor-pointer"
+                        >
+                          <Lock className="w-3.5 h-3.5 text-amber-700" />
+                          <span>Remove Lock</span>
+                        </button>
+                        <button
+                          id="placeholder-delete-entry-btn"
+                          type="button"
+                          onClick={() => handleDeleteEntry(activeEntry.id)}
+                          className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium rounded-xl border border-red-200 bg-white text-red-600 hover:bg-red-50 active:scale-95 transition cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                          <span>Delete Entry</span>
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
               ) : (
                 <>
@@ -994,6 +1018,7 @@ export default function App() {
         <PinModal
           mode={pinModal}
           onSubmit={pinModal === "set" ? handleSetPin : handleEnterPin}
+          onSwitchMode={(m) => setPinModal(m)}
           onCancel={() => {
             setPinModal(null);
             setPendingLockedEntry(null);

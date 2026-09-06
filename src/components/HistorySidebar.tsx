@@ -237,7 +237,74 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
                   </div>
                 </div>
 
-                {!isLocked && (
+                {isLocked ? (
+                  <>
+                    <p className="text-[11px] text-stone-400 italic mb-2 leading-relaxed">
+                      🔒 Protected reflection body
+                    </p>
+                    <div className="flex items-center justify-between pt-1 border-t border-stone-100">
+                      <span className="text-[10px] text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200/60 font-medium">
+                        PIN protected
+                      </span>
+                      <div className="flex items-center gap-0.5">
+                        <button
+                          id={`lock-entry-btn-${entry.id}`}
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onToggleLock(entry);
+                          }}
+                          title="Unlock / remove protection"
+                          className="opacity-75 group-hover:opacity-100 p-1 text-amber-700 hover:text-amber-800 rounded transition cursor-pointer"
+                          aria-label="Unlock entry"
+                        >
+                          <Lock className="w-3.5 h-3.5" />
+                        </button>
+
+                        {confirmingId === entry.id ? (
+                          <span className="flex items-center gap-1.5 text-[11px]">
+                            <span className="text-stone-500">Delete?</span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onDeleteEntry(entry.id, e);
+                                setConfirmingId(null);
+                              }}
+                              className="font-medium text-red-600 hover:text-red-700 cursor-pointer px-1 py-0.5 rounded hover:bg-red-50 transition"
+                            >
+                              Delete
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setConfirmingId(null);
+                              }}
+                              className="text-stone-500 hover:text-stone-700 cursor-pointer px-1 py-0.5 rounded hover:bg-stone-100 transition"
+                            >
+                              Cancel
+                            </button>
+                          </span>
+                        ) : (
+                          <button
+                            id={`delete-entry-btn-${entry.id}`}
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setConfirmingId(entry.id);
+                            }}
+                            title="Delete Entry"
+                            className="opacity-60 group-hover:opacity-100 p-1 text-stone-400 hover:text-red-600 rounded transition cursor-pointer"
+                            aria-label="Delete entry"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                ) : (
                   <>
                     <p className="text-[11px] line-clamp-2 mb-2 leading-relaxed text-stone-500">
                       {previewSnippet}

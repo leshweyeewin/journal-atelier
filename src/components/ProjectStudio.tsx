@@ -397,7 +397,10 @@ export const ProjectStudio: React.FC<ProjectStudioProps> = ({
 
             {/* Loading Indicator */}
             {loading && (
-              <div className="flex items-center justify-between text-xs sm:text-sm text-amber-900 bg-amber-50/90 border border-amber-200/80 rounded-xl px-4 py-3 shadow-xs animate-pulse">
+              <div
+                id="studio-loading-indicator"
+                className="flex items-center justify-between text-xs sm:text-sm text-amber-900 bg-amber-50/90 border border-amber-200/80 rounded-xl px-4 py-3 shadow-xs animate-pulse"
+              >
                 <div className="flex items-center gap-2.5">
                   <Loader2 className="w-4 h-4 animate-spin text-amber-600 shrink-0" />
                   <span className="font-medium">{IDEATION_STAGES[stageIndex]}</span>
@@ -423,7 +426,7 @@ export const ProjectStudio: React.FC<ProjectStudioProps> = ({
 
       {/* Results Region - Graceful Degradation */}
       {activeIdea && !loading && (
-        <div className="space-y-6 animate-fadeIn">
+        <div id="studio-idea-card" className="space-y-6 animate-fadeIn">
           {/* Refined Proposal Review Banner */}
           {pendingRefinedIdea && (
             <div

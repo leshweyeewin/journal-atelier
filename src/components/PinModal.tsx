@@ -5,9 +5,10 @@ interface PinModalProps {
   mode: "set" | "enter";
   onSubmit: (pin: string) => Promise<string | null>;
   onCancel: () => void;
+  onSwitchMode?: (mode: "set" | "enter") => void;
 }
 
-export const PinModal: React.FC<PinModalProps> = ({ mode, onSubmit, onCancel }) => {
+export const PinModal: React.FC<PinModalProps> = ({ mode, onSubmit, onCancel, onSwitchMode }) => {
   const [pin, setPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -164,6 +165,22 @@ export const PinModal: React.FC<PinModalProps> = ({ mode, onSubmit, onCancel }) 
             <div className="flex items-center gap-1.5 text-xs text-red-600 bg-red-50/80 border border-red-200/60 rounded-xl p-2.5">
               <AlertCircle className="w-4 h-4 shrink-0" />
               <span>{error}</span>
+            </div>
+          )}
+
+          {mode === "enter" && onSwitchMode && (
+            <div className="text-center pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setError(null);
+                  setPin("");
+                  onSwitchMode("set");
+                }}
+                className="text-[11px] text-amber-700 hover:text-amber-900 font-medium hover:underline cursor-pointer"
+              >
+                Forgot PIN? Reset with a new PIN
+              </button>
             </div>
           )}
 
