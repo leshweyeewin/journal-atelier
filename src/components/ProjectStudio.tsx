@@ -476,8 +476,8 @@ export const ProjectStudio: React.FC<ProjectStudioProps> = ({
           <div className="rounded-2xl border border-stone-200 bg-white p-4 sm:p-5 shadow-xs flex flex-wrap items-center gap-2.5">
             <span className="text-xs font-semibold text-stone-600 mr-1">Actions:</span>
 
-            {/* Edit Toggle for Saved Ideas */}
-            {initialIdea && (
+            {/* Edit Toggle for Active Ideas */}
+            {activeIdea && (
               <button
                 id="studio-edit-toggle-btn"
                 type="button"
@@ -504,7 +504,7 @@ export const ProjectStudio: React.FC<ProjectStudioProps> = ({
             )}
 
             {/* Refine / Expand Action */}
-            {initialIdea && (
+            {activeIdea && (
               <button
                 id="studio-refine-toggle-btn"
                 type="button"
@@ -520,7 +520,7 @@ export const ProjectStudio: React.FC<ProjectStudioProps> = ({
               </button>
             )}
 
-            {onSaveIdea && !initialIdea && (
+            {onSaveIdea && (
               <button
                 id="studio-save-idea-btn"
                 type="button"
